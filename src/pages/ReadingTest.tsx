@@ -770,7 +770,7 @@ export default function ReadingTest() {
         {/* Fixed Container for Header and Content */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Top Header - IELTS Official Style */}
-          <header className="border-b border-border bg-white px-2 md:px-4 py-2 md:py-3 flex items-center justify-between">
+          <header className="border-b border-border bg-white px-2 md:px-4 py-1 md:py-3 flex items-center justify-between">
             {/* Left - IELTS Logo and Test Taker ID */}
             <div className="flex items-center gap-2 md:gap-4">
               <div className="ielts-logo">
