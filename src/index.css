@@ -1456,14 +1456,19 @@ body.ielts-theme-yellow-on-black [data-radix-dialog-content] .border {
   color: hsl(0 0% 0%);
 }
 
+/* Yellow on Black - BOTH arrows should have yellow background with black arrows */
 .ielts-theme-yellow-on-black .ielts-nav-arrow {
-  background-color: hsl(0 0% 25%);
-  color: hsl(50 100% 50%);
+  background-color: hsl(50 100% 50%);
+  color: hsl(0 0% 0%);
+}
+
+.ielts-theme-yellow-on-black .ielts-nav-arrow:hover:not(:disabled) {
+  background-color: hsl(50 100% 45%);
 }
 
 .ielts-theme-yellow-on-black .ielts-nav-arrow:disabled {
-  background-color: hsl(0 0% 15%);
-  color: hsl(0 0% 40%);
+  background-color: hsl(50 50% 35%);
+  color: hsl(0 0% 30%);
 }
 
 .ielts-theme-yellow-on-black .ielts-nav-arrow-primary {
