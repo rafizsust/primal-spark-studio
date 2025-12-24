@@ -468,9 +468,11 @@ export default function ListeningTest() {
 
   const handleSubmit = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
-      localStorage.setItem('pendingTestSubmission', JSON.stringify({
+      // Quota-safe localStorage write (localStorage may already be full)
+      const { safeLocalStorageSetItem } = await import('@/lib/storage');
+      safeLocalStorageSetItem('pendingTestSubmission', JSON.stringify({
         testId,
         testType: 'listening',
         answers,

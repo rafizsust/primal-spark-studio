@@ -55,13 +55,17 @@ export const HighlightNoteProvider = ({ children, testId }: HighlightNoteProvide
     }
   }, [testId]);
 
-  // Save to localStorage whenever highlights or notes change
+  // Save to localStorage whenever highlights or notes change (quota-safe)
   useEffect(() => {
-    localStorage.setItem(`ieltsai-highlights-${testId}`, JSON.stringify(highlights));
+    import('@/lib/storage').then(({ safeLocalStorageSetItem }) => {
+      safeLocalStorageSetItem(`ieltsai-highlights-${testId}`, JSON.stringify(highlights));
+    });
   }, [highlights, testId]);
 
   useEffect(() => {
-    localStorage.setItem(`ieltsai-notes-${testId}`, JSON.stringify(notes));
+    import('@/lib/storage').then(({ safeLocalStorageSetItem }) => {
+      safeLocalStorageSetItem(`ieltsai-notes-${testId}`, JSON.stringify(notes));
+    });
   }, [notes, testId]);
 
   const addHighlight = useCallback((
