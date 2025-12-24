@@ -182,33 +182,110 @@ export interface QuestionResult {
 export const AI_PRACTICE_STORAGE_KEY = 'ai_practice_tests';
 export const AI_PRACTICE_RESULTS_KEY = 'ai_practice_results';
 
+// In-memory cache for current test (avoids localStorage quota issues with base64 data)
+let currentTestCache: GeneratedTest | null = null;
+
+// Strip large base64 data for localStorage storage
+function stripBase64Data(test: GeneratedTest): GeneratedTest {
+  const stripped = { ...test };
+  
+  // Remove audio data
+  delete stripped.audioBase64;
+  
+  // Remove writing task image
+  if (stripped.writingTask) {
+    stripped.writingTask = { ...stripped.writingTask };
+    delete stripped.writingTask.image_base64;
+  }
+  
+  // Remove speaking audio
+  if (stripped.speakingParts) {
+    stripped.speakingParts = stripped.speakingParts.map(part => ({
+      ...part,
+      questions: part.questions.map(q => {
+        const { audio_base64, ...rest } = q;
+        return rest;
+      })
+    }));
+  }
+  
+  return stripped;
+}
+
 // Helper to save/load from localStorage
 export function saveGeneratedTest(test: GeneratedTest): void {
-  const stored = localStorage.getItem(AI_PRACTICE_STORAGE_KEY);
-  const tests: GeneratedTest[] = stored ? JSON.parse(stored) : [];
-  // Keep only last 10 tests
-  const updated = [test, ...tests.slice(0, 9)];
-  localStorage.setItem(AI_PRACTICE_STORAGE_KEY, JSON.stringify(updated));
+  // Store full test in memory for immediate access
+  currentTestCache = test;
+  
+  try {
+    // Store stripped version in localStorage (metadata only)
+    const strippedTest = stripBase64Data(test);
+    const stored = localStorage.getItem(AI_PRACTICE_STORAGE_KEY);
+    const tests: GeneratedTest[] = stored ? JSON.parse(stored) : [];
+    // Keep only last 10 tests
+    const updated = [strippedTest, ...tests.filter(t => t.id !== test.id).slice(0, 9)];
+    localStorage.setItem(AI_PRACTICE_STORAGE_KEY, JSON.stringify(updated));
+  } catch (error) {
+    console.warn('Could not save test to localStorage, using memory only:', error);
+    // Clear old tests to make room
+    try {
+      localStorage.removeItem(AI_PRACTICE_STORAGE_KEY);
+    } catch {
+      // Ignore
+    }
+  }
 }
 
 export function loadGeneratedTests(): GeneratedTest[] {
-  const stored = localStorage.getItem(AI_PRACTICE_STORAGE_KEY);
-  return stored ? JSON.parse(stored) : [];
+  try {
+    const stored = localStorage.getItem(AI_PRACTICE_STORAGE_KEY);
+    const tests: GeneratedTest[] = stored ? JSON.parse(stored) : [];
+    // Include current cached test if it exists
+    if (currentTestCache && !tests.find(t => t.id === currentTestCache!.id)) {
+      return [currentTestCache, ...tests];
+    }
+    return tests;
+  } catch {
+    return currentTestCache ? [currentTestCache] : [];
+  }
 }
 
 export function loadGeneratedTest(testId: string): GeneratedTest | null {
+  // First check memory cache (has full data including base64)
+  if (currentTestCache?.id === testId) {
+    return currentTestCache;
+  }
+  // Fall back to localStorage (without base64 data)
   const tests = loadGeneratedTests();
   return tests.find(t => t.id === testId) || null;
 }
 
+// Set current test in memory (used when navigating to test)
+export function setCurrentTest(test: GeneratedTest): void {
+  currentTestCache = test;
+}
+
+// Get current test from memory
+export function getCurrentTest(): GeneratedTest | null {
+  return currentTestCache;
+}
+
 export function savePracticeResult(result: PracticeResult): void {
-  const stored = localStorage.getItem(AI_PRACTICE_RESULTS_KEY);
-  const results: PracticeResult[] = stored ? JSON.parse(stored) : [];
-  const updated = [result, ...results.slice(0, 49)]; // Keep last 50 results
-  localStorage.setItem(AI_PRACTICE_RESULTS_KEY, JSON.stringify(updated));
+  try {
+    const stored = localStorage.getItem(AI_PRACTICE_RESULTS_KEY);
+    const results: PracticeResult[] = stored ? JSON.parse(stored) : [];
+    const updated = [result, ...results.slice(0, 49)]; // Keep last 50 results
+    localStorage.setItem(AI_PRACTICE_RESULTS_KEY, JSON.stringify(updated));
+  } catch (error) {
+    console.warn('Could not save result to localStorage:', error);
+  }
 }
 
 export function loadPracticeResults(): PracticeResult[] {
-  const stored = localStorage.getItem(AI_PRACTICE_RESULTS_KEY);
-  return stored ? JSON.parse(stored) : [];
+  try {
+    const stored = localStorage.getItem(AI_PRACTICE_RESULTS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
 }
