@@ -122,94 +122,128 @@ async function callGemini(apiKey: string, prompt: string): Promise<string | null
   return null;
 }
 
-// Generate TTS audio using Gemini
-async function generateAudio(apiKey: string, script: string): Promise<{ audioBase64: string; sampleRate: number } | null> {
-  try {
-    console.log("Generating TTS audio...");
-    
-    const ttsPrompt = `Read the following conversation slowly and clearly, as if for a language listening test. 
+// Generate TTS audio using Gemini with retry logic for transient errors
+async function generateAudio(apiKey: string, script: string, maxRetries = 3): Promise<{ audioBase64: string; sampleRate: number } | null> {
+  const ttsPrompt = `Read the following conversation slowly and clearly, as if for a language listening test. 
 Use a moderate speaking pace with natural pauses between sentences. 
 Pause briefly (about 1-2 seconds) after each speaker finishes their turn.
 Speaker1 and Speaker2 should have distinct, clear voices:
 
 ${script}`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: ttsPrompt }] }],
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-              multiSpeakerVoiceConfig: {
-                speakerVoiceConfigs: [
-                  { speaker: "Speaker1", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
-                  { speaker: "Speaker2", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } },
-                ],
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Generating TTS audio (attempt ${attempt}/${maxRetries})...`);
+      
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: ttsPrompt }] }],
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                multiSpeakerVoiceConfig: {
+                  speakerVoiceConfigs: [
+                    { speaker: "Speaker1", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+                    { speaker: "Speaker2", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } },
+                  ],
+                },
               },
             },
-          },
-        }),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`TTS failed (attempt ${attempt}):`, errorText);
+        
+        // Retry on 500/503 errors (transient)
+        if ((response.status === 500 || response.status === 503) && attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 2s, 4s, 8s
+          console.log(`Retrying TTS in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        return null;
       }
-    );
 
-    if (!response.ok) {
-      console.error("TTS failed:", await response.text());
-      return null;
+      const data = await response.json();
+      const audioData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      
+      if (audioData) {
+        console.log("TTS audio generated successfully");
+        return { audioBase64: audioData, sampleRate: 24000 };
+      }
+    } catch (err) {
+      console.error(`TTS error (attempt ${attempt}):`, err);
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
     }
-
-    const data = await response.json();
-    const audioData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    
-    if (audioData) {
-      return { audioBase64: audioData, sampleRate: 24000 };
-    }
-  } catch (err) {
-    console.error("TTS error:", err);
   }
   return null;
 }
 
-// Generate single voice TTS for speaking questions
-async function generateSingleVoiceTTS(apiKey: string, text: string): Promise<{ audioBase64: string; sampleRate: number } | null> {
-  try {
-    console.log("Generating single voice TTS...");
-    
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: `Read this question slowly and clearly as an IELTS examiner: ${text}` }] }],
-          generationConfig: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: "Kore" }
-              }
+// Generate single voice TTS for speaking questions with retry logic
+async function generateSingleVoiceTTS(apiKey: string, text: string, maxRetries = 3): Promise<{ audioBase64: string; sampleRate: number } | null> {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Generating single voice TTS (attempt ${attempt}/${maxRetries})...`);
+      
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: `Read this question slowly and clearly as an IELTS examiner: ${text}` }] }],
+            generationConfig: {
+              responseModalities: ["AUDIO"],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: "Kore" }
+                }
+              },
             },
-          },
-        }),
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Single voice TTS failed (attempt ${attempt}):`, errorText);
+        
+        // Retry on 500/503 errors (transient)
+        if ((response.status === 500 || response.status === 503) && attempt < maxRetries) {
+          const delay = Math.pow(2, attempt) * 1000;
+          console.log(`Retrying single voice TTS in ${delay}ms...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        return null;
       }
-    );
 
-    if (!response.ok) {
-      console.error("Single voice TTS failed:", await response.text());
-      return null;
+      const data = await response.json();
+      const audioData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      
+      if (audioData) {
+        console.log("Single voice TTS generated successfully");
+        return { audioBase64: audioData, sampleRate: 24000 };
+      }
+    } catch (err) {
+      console.error(`Single voice TTS error (attempt ${attempt}):`, err);
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
     }
-
-    const data = await response.json();
-    const audioData = data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-    
-    if (audioData) {
-      return { audioBase64: audioData, sampleRate: 24000 };
-    }
-  } catch (err) {
-    console.error("Single voice TTS error:", err);
   }
   return null;
 }
