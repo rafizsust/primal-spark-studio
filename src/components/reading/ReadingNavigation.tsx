@@ -475,17 +475,18 @@ export function ReadingNavigation({
                       {/* Part label */}
                       <button
                         onClick={() => handlePartClick(p.index)}
+                        aria-label={p.title}
                         className={cn(
                           "shrink-0 flex items-center justify-start text-sm font-semibold whitespace-nowrap",
                           p.complete ? "text-green-600" : "text-foreground"
                         )}
-                        style={{ 
+                        style={{
                           width: PART_LABEL_MIN_WIDTH,
                           height: QUESTION_BUTTON_SIZE,
                         }}
                       >
                         {p.complete && <Check size={14} className="mr-1 text-green-600" strokeWidth={2.5} />}
-                        {p.title}
+                        <span className="hidden md:inline">{p.title}</span>
                       </button>
                       
                       {/* Question numbers - sliding window on mobile */}
@@ -562,6 +563,7 @@ export function ReadingNavigation({
                     {/* Part label with count */}
                     <button
                       onClick={() => handlePartClick(p.index)}
+                      aria-label={p.title}
                       className={cn(
                         "flex w-full min-w-0 items-center justify-center whitespace-nowrap text-sm px-2",
                         p.complete ? "text-green-600 font-semibold" : "text-muted-foreground"
@@ -569,7 +571,7 @@ export function ReadingNavigation({
                       style={{ height: QUESTION_BUTTON_SIZE }}
                     >
                       {p.complete && <Check size={14} className="mr-1 text-green-600" strokeWidth={2.5} />}
-                      <span className="min-w-0 truncate">{p.title}</span>
+                      <span className="min-w-0 truncate hidden md:inline">{p.title}</span>
                       {!p.complete && (
                         <span className="ml-2 tabular-nums hidden md:inline">
                           {p.answered} of {p.totalQuestions}
