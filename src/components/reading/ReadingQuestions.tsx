@@ -901,7 +901,7 @@ export function ReadingQuestions({
                                               <Select value={answer || ''} onValueChange={handleChange}>
                                                 <SelectTrigger
                                                   className={cn(
-                                                    "inline-flex min-w-[174px] h-7 text-sm text-center font-medium mx-1 rounded-[3px]",
+                                                    "inline-flex w-28 h-7 text-sm text-center font-medium mx-1 rounded-[3px]",
                                                     "bg-[hsl(var(--ielts-input-bg,0_0%_100%))] border border-[hsl(var(--ielts-input-border))] text-foreground",
                                                     "focus:border-[hsl(var(--ielts-input-focus))] focus:ring-0",
                                                     isActive && "border-[hsl(var(--ielts-input-focus))]"

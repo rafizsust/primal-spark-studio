@@ -67,7 +67,7 @@ export function SummaryCompletion({ question, answer, onAnswerChange, isActive, 
                     <Select value={answer || ''} onValueChange={onAnswerChange}>
                       <SelectTrigger 
                         className={cn(
-                          "min-w-[174px] h-7 text-sm inline-flex mx-1 rounded-[3px]",
+                          "w-28 h-7 text-sm px-2 inline-flex mx-1 rounded-[3px]",
                           "bg-[hsl(var(--ielts-input-bg,0_0%_100%))] border border-[hsl(var(--ielts-input-border))] text-foreground",
                           "focus:border-[hsl(var(--ielts-input-focus))] focus:ring-0",
                           isActive && "border-[hsl(var(--ielts-input-focus))] border-2"
@@ -122,7 +122,7 @@ export function SummaryCompletion({ question, answer, onAnswerChange, isActive, 
         <Select value={answer || ''} onValueChange={onAnswerChange}>
           <SelectTrigger 
             className={cn(
-              "min-w-[174px] w-auto h-7 rounded-[3px]",
+              "w-28 h-7 text-sm px-2 rounded-[3px]",
               "bg-[hsl(var(--ielts-input-bg,0_0%_100%))] border border-[hsl(var(--ielts-input-border))] text-foreground",
               "focus:border-[hsl(var(--ielts-input-focus))] focus:ring-0",
               isActive && "border-[hsl(var(--ielts-input-focus))] border-2"

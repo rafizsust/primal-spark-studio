@@ -45,7 +45,7 @@ export function FillInBlank({
           <SelectTrigger
             onClick={(e) => e.stopPropagation()}
             className={cn(
-              "inline-flex min-w-[174px] h-7 px-2 text-sm font-bold align-baseline mx-0.5 rounded-[3px]",
+              "inline-flex w-28 h-7 px-2 text-sm font-bold align-baseline mx-0.5 rounded-[3px]",
               "bg-[hsl(var(--ielts-input-bg,0_0%_100%))] border border-[hsl(var(--ielts-input-border))] text-foreground",
               "focus:border-[hsl(var(--ielts-input-focus))] focus:ring-0",
               isActive && "border-[hsl(var(--ielts-input-focus))]"
