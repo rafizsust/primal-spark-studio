@@ -34,6 +34,8 @@ import AIPracticeTest from "./pages/AIPracticeTest";
 import AIPracticeResults from "./pages/AIPracticeResults";
 import AIPracticeWritingTest from "./pages/AIPracticeWritingTest";
 import AIPracticeSpeakingTest from "./pages/AIPracticeSpeakingTest";
+import AIPracticeReadingTest from "./pages/AIPracticeReadingTest";
+import AIPracticeListeningTest from "./pages/AIPracticeListeningTest";
 // Admin pages
 import AdminLayout from "./pages/admin/AdminLayout";
 import AdminDashboard from "./pages/admin/AdminDashboard";
