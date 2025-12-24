@@ -447,6 +447,8 @@ export function ReadingNavigation({
             );
           })}
         </div>
+        {/* Spacer for submit button alignment */}
+        <div className="shrink-0 ml-2 md:ml-8" style={{ width: isMobile ? 36 : 64 }} />
       </div>
       
       {/* Content row - numbers centered */}
