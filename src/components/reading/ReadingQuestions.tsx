@@ -901,7 +901,7 @@ export function ReadingQuestions({
                                               <Select value={answer || ''} onValueChange={handleChange}>
                                                 <SelectTrigger
                                                   className={cn(
-                                                    "inline-flex w-28 h-7 text-sm text-center font-medium mx-1 rounded-[3px]",
+                                                    "inline-flex min-w-[174px] h-7 text-sm text-center font-medium mx-1 rounded-[3px]",
                                                     "bg-[hsl(var(--ielts-input-bg,0_0%_100%))] border border-[hsl(var(--ielts-input-border))] text-foreground",
                                                     "focus:border-[hsl(var(--ielts-input-focus))] focus:ring-0",
                                                     isActive && "border-[hsl(var(--ielts-input-focus))]"
@@ -928,7 +928,7 @@ export function ReadingQuestions({
                                                 onPointerDown={(e) => e.stopPropagation()}
                                                 placeholder={String(question.question_number)}
                                                 className={cn(
-                                                  "ielts-input inline w-28 h-7 text-sm text-center font-medium rounded-[3px] border mx-1",
+                                                  "ielts-input inline min-w-[174px] h-7 text-sm text-center font-medium rounded-[3px] border mx-1",
                                                   "bg-[hsl(var(--ielts-card-bg,0_0%_100%))] border-[hsl(var(--ielts-input-border))] text-foreground",
                                                   "placeholder:text-center placeholder:font-bold placeholder:text-foreground/70",
                                                   "focus:outline-none focus:border-[hsl(var(--ielts-input-focus))] focus:ring-0",
@@ -952,7 +952,7 @@ export function ReadingQuestions({
                                           onPointerDown={(e) => e.stopPropagation()}
                                           placeholder={String(question.question_number)}
                                           className={cn(
-                                            "ielts-input inline w-28 h-7 text-sm text-center font-medium rounded-[3px] border mx-1",
+                                            "ielts-input inline min-w-[174px] h-7 text-sm text-center font-medium rounded-[3px] border mx-1",
                                             "bg-[hsl(var(--ielts-card-bg,0_0%_100%))] border-[hsl(var(--ielts-input-border))] text-foreground",
                                             "placeholder:text-center placeholder:font-bold placeholder:text-foreground/70",
                                             "focus:outline-none focus:border-[hsl(var(--ielts-input-focus))] focus:ring-0",
