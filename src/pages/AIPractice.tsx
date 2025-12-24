@@ -36,6 +36,7 @@ import {
   QUESTION_COUNTS,
   getDefaultTime,
   saveGeneratedTest,
+  setCurrentTest,
   GeneratedTest
 } from '@/types/aiPractice';
 import { Link } from 'react-router-dom';
@@ -175,6 +176,8 @@ export default function AIPractice() {
         generatedAt: new Date().toISOString(),
       };
 
+      // Save to memory cache first (with full data), then stripped to localStorage
+      setCurrentTest(generatedTest);
       saveGeneratedTest(generatedTest);
 
       toast({
