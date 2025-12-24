@@ -1442,46 +1442,62 @@ body.ielts-theme-yellow-on-black [data-radix-dialog-content] .border {
 
 /* Dark theme navigation arrows - left gray with black arrow, right white with black arrow */
 .ielts-theme-white-on-black .ielts-nav-arrow {
-  background-color: hsl(0 0% 50%);
-  color: hsl(0 0% 0%);
+  background-color: hsl(0 0% 50%) !important;
+  color: hsl(0 0% 0%) !important;
 }
 
 .ielts-theme-white-on-black .ielts-nav-arrow:hover:not(:disabled) {
-  background-color: hsl(0 0% 60%);
+  background-color: hsl(0 0% 60%) !important;
 }
 
 .ielts-theme-white-on-black .ielts-nav-arrow:disabled {
-  background-color: hsl(0 0% 30%);
-  color: hsl(0 0% 50%);
+  background-color: hsl(0 0% 30%) !important;
+  color: hsl(0 0% 50%) !important;
 }
 
 .ielts-theme-white-on-black .ielts-nav-arrow-primary {
-  background-color: hsl(0 0% 100%);
-  color: hsl(0 0% 0%);
+  background-color: hsl(0 0% 100%) !important;
+  color: hsl(0 0% 0%) !important;
 }
 
 .ielts-theme-white-on-black .ielts-nav-arrow-primary:hover:not(:disabled) {
-  background-color: hsl(0 0% 90%);
+  background-color: hsl(0 0% 90%) !important;
+}
+
+/* White on Black - Submit button styling */
+.ielts-theme-white-on-black footer button[title="Submit test"],
+.ielts-theme-white-on-black .ielts-test-content footer button[title="Submit test"] {
+  background-color: hsl(0 0% 20%) !important;
+  color: hsl(180 15% 55%) !important;
+  border: none !important;
 }
 
 /* Yellow on Black - BOTH arrows should have yellow background with black arrows */
 .ielts-theme-yellow-on-black .ielts-nav-arrow {
-  background-color: hsl(50 100% 50%);
-  color: hsl(0 0% 0%);
+  background-color: hsl(50 100% 50%) !important;
+  color: hsl(0 0% 0%) !important;
 }
 
 .ielts-theme-yellow-on-black .ielts-nav-arrow:hover:not(:disabled) {
-  background-color: hsl(50 100% 45%);
+  background-color: hsl(50 100% 45%) !important;
 }
 
 .ielts-theme-yellow-on-black .ielts-nav-arrow:disabled {
-  background-color: hsl(50 50% 35%);
-  color: hsl(0 0% 30%);
+  background-color: hsl(50 50% 35%) !important;
+  color: hsl(0 0% 30%) !important;
 }
 
 .ielts-theme-yellow-on-black .ielts-nav-arrow-primary {
-  background-color: hsl(50 100% 50%);
-  color: hsl(0 0% 0%);
+  background-color: hsl(50 100% 50%) !important;
+  color: hsl(0 0% 0%) !important;
+}
+
+/* Yellow on Black - Submit button styling */
+.ielts-theme-yellow-on-black footer button[title="Submit test"],
+.ielts-theme-yellow-on-black .ielts-test-content footer button[title="Submit test"] {
+  background-color: hsl(0 0% 20%) !important;
+  color: hsl(50 100% 50%) !important;
+  border: none !important;
 }
 
 /* ===== DARK THEME INPUT STYLING - CRITICAL FOR VISIBILITY ===== */
