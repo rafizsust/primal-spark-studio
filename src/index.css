@@ -1446,6 +1446,11 @@ body.ielts-theme-yellow-on-black [data-radix-dialog-content] .border {
   color: hsl(0 0% 0%) !important;
 }
 
+.ielts-theme-white-on-black .ielts-nav-arrow svg {
+  color: hsl(0 0% 0%) !important;
+  stroke: hsl(0 0% 0%) !important;
+}
+
 .ielts-theme-white-on-black .ielts-nav-arrow:hover:not(:disabled) {
   background-color: hsl(0 0% 60%) !important;
 }
@@ -1455,9 +1460,19 @@ body.ielts-theme-yellow-on-black [data-radix-dialog-content] .border {
   color: hsl(0 0% 50%) !important;
 }
 
+.ielts-theme-white-on-black .ielts-nav-arrow:disabled svg {
+  color: hsl(0 0% 50%) !important;
+  stroke: hsl(0 0% 50%) !important;
+}
+
 .ielts-theme-white-on-black .ielts-nav-arrow-primary {
   background-color: hsl(0 0% 100%) !important;
   color: hsl(0 0% 0%) !important;
+}
+
+.ielts-theme-white-on-black .ielts-nav-arrow-primary svg {
+  color: hsl(0 0% 0%) !important;
+  stroke: hsl(0 0% 0%) !important;
 }
 
 .ielts-theme-white-on-black .ielts-nav-arrow-primary:hover:not(:disabled) {
@@ -1478,6 +1493,11 @@ body.ielts-theme-yellow-on-black [data-radix-dialog-content] .border {
   color: hsl(0 0% 0%) !important;
 }
 
+.ielts-theme-yellow-on-black .ielts-nav-arrow svg {
+  color: hsl(0 0% 0%) !important;
+  stroke: hsl(0 0% 0%) !important;
+}
+
 .ielts-theme-yellow-on-black .ielts-nav-arrow:hover:not(:disabled) {
   background-color: hsl(50 100% 45%) !important;
 }
@@ -1487,9 +1507,19 @@ body.ielts-theme-yellow-on-black [data-radix-dialog-content] .border {
   color: hsl(0 0% 30%) !important;
 }
 
+.ielts-theme-yellow-on-black .ielts-nav-arrow:disabled svg {
+  color: hsl(0 0% 30%) !important;
+  stroke: hsl(0 0% 30%) !important;
+}
+
 .ielts-theme-yellow-on-black .ielts-nav-arrow-primary {
   background-color: hsl(50 100% 50%) !important;
   color: hsl(0 0% 0%) !important;
+}
+
+.ielts-theme-yellow-on-black .ielts-nav-arrow-primary svg {
+  color: hsl(0 0% 0%) !important;
+  stroke: hsl(0 0% 0%) !important;
 }
 
 /* Yellow on Black - Submit button styling */
