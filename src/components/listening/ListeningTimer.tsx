@@ -63,7 +63,7 @@ export function ListeningTimer({ timeLeft, setTimeLeft, isPaused = false, onTogg
         type="button"
         onClick={handleTimerClick}
         className={cn(
-          "flex items-center gap-2 px-4 py-2 rounded-lg transition-all cursor-pointer hover:opacity-80",
+          "flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 rounded-lg transition-all cursor-pointer hover:opacity-80",
           isPaused 
             ? "bg-amber-500/20 border-2 border-amber-500 animate-pulse" 
             : isLowTime 
@@ -72,18 +72,18 @@ export function ListeningTimer({ timeLeft, setTimeLeft, isPaused = false, onTogg
         )}
       >
         {isPaused ? (
-          <Play size={20} className="text-amber-500" />
+          <Play size={16} className="md:w-5 md:h-5 text-amber-500" />
         ) : (
-          <Clock size={20} className={isLowTime ? "text-destructive" : "text-primary"} />
+          <Clock size={16} className={cn("md:w-5 md:h-5", isLowTime ? "text-destructive" : "text-primary")} />
         )}
         <span className={cn(
-          "font-mono font-bold text-lg",
+          "font-mono font-bold text-sm md:text-lg",
           isPaused ? "text-amber-500" : isLowTime ? "text-destructive" : "text-primary"
         )}>
           {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
         </span>
         {isPaused && (
-          <span className="text-xs font-medium text-amber-500 uppercase tracking-wider">
+          <span className="hidden md:inline text-xs font-medium text-amber-500 uppercase tracking-wider">
             PAUSED (Click to Resume)
           </span>
         )}

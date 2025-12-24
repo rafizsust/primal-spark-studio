@@ -35,7 +35,7 @@ export function ReadingTimer({ timeLeft, setTimeLeft, isPaused = false, onToggle
     <button
       onClick={onTogglePause}
       className={cn(
-        "flex items-center gap-2 px-4 py-2 rounded-lg transition-all timer-container cursor-pointer hover:opacity-80",
+        "flex items-center gap-1 md:gap-2 px-2 md:px-4 py-1 md:py-2 rounded-lg transition-all timer-container cursor-pointer hover:opacity-80",
         isPaused 
           ? "bg-amber-500/20 border-2 border-amber-500 animate-pulse" 
           : isLowTime 
@@ -44,18 +44,18 @@ export function ReadingTimer({ timeLeft, setTimeLeft, isPaused = false, onToggle
       )}
     >
       {isPaused ? (
-        <Pause size={20} className="text-amber-500" />
+        <Pause size={16} className="md:w-5 md:h-5 text-amber-500" />
       ) : (
-        <Clock size={20} className={cn("timer-icon", isLowTime ? "text-destructive" : "text-foreground")} />
+        <Clock size={16} className={cn("md:w-5 md:h-5 timer-icon", isLowTime ? "text-destructive" : "text-foreground")} />
       )}
       <span className={cn(
-        "font-mono font-bold text-lg timer-text",
+        "font-mono font-bold text-sm md:text-lg timer-text",
         isPaused ? "text-amber-500" : isLowTime ? "text-destructive" : "text-foreground"
       )}>
         {minutes.toString().padStart(2, '0')}:{seconds.toString().padStart(2, '0')}
       </span>
       {isPaused && (
-        <span className="text-xs font-medium text-amber-500 uppercase tracking-wider">
+        <span className="hidden md:inline text-xs font-medium text-amber-500 uppercase tracking-wider">
           PAUSED
         </span>
       )}
