@@ -167,7 +167,11 @@ export default function AIPractice() {
         sampleRate: data.sampleRate,
         transcript: data.transcript,
         questionGroups: data.questionGroups,
-        totalQuestions: questionCount,
+        writingTask: data.writingTask,
+        speakingParts: data.speakingParts,
+        totalQuestions: activeModule === 'writing' ? 1 : 
+          activeModule === 'speaking' ? (data.speakingParts?.reduce((acc: number, p: any) => acc + (p.questions?.length || 0), 0) || 0) : 
+          questionCount,
         generatedAt: new Date().toISOString(),
       };
 
@@ -178,8 +182,14 @@ export default function AIPractice() {
         description: `Your ${activeModule} practice test is ready`,
       });
 
-      // Navigate to the practice test
-      navigate(`/ai-practice/test/${generatedTest.id}`);
+      // Navigate to the correct practice test based on module
+      if (activeModule === 'writing') {
+        navigate(`/ai-practice/writing/${generatedTest.id}`);
+      } else if (activeModule === 'speaking') {
+        navigate(`/ai-practice/speaking/${generatedTest.id}`);
+      } else {
+        navigate(`/ai-practice/test/${generatedTest.id}`);
+      }
 
     } catch (err: any) {
       console.error('Generation error:', err);

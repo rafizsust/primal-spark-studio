@@ -21,7 +21,6 @@ export default function AIPracticeWritingTest() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [evaluationStep, setEvaluationStep] = useState(0);
   const startTimeRef = useRef<number>(Date.now());
 
   const wordCount = submissionText.trim().split(/\s+/).filter(Boolean).length;
@@ -116,7 +115,7 @@ export default function AIPracticeWritingTest() {
   };
 
   if (isSubmitting) {
-    return <AILoadingScreen title="Evaluating Your Writing" description="AI is analyzing your response..." progressSteps={['Reading submission', 'Analyzing content', 'Scoring criteria', 'Generating feedback']} currentStepIndex={evaluationStep} />;
+    return <AILoadingScreen title="Evaluating Your Writing" description="AI is analyzing your response..." progressSteps={['Reading submission', 'Analyzing content', 'Scoring criteria', 'Generating feedback']} currentStepIndex={0} />;
   }
 
   if (!test?.writingTask) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>;

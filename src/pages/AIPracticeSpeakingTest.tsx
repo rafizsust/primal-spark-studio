@@ -5,7 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { loadGeneratedTest, savePracticeResult, GeneratedTest, PracticeResult } from '@/types/aiPractice';
 import { useToast } from '@/hooks/use-toast';
-import { Clock, Mic, MicOff, Play, ArrowRight, Send } from 'lucide-react';
+import { Clock, Mic, MicOff, ArrowRight, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 export default function AIPracticeSpeakingTest() {
@@ -18,7 +18,7 @@ export default function AIPracticeSpeakingTest() {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [phase, setPhase] = useState<'listening' | 'preparing' | 'speaking' | 'done'>('listening');
   const [isRecording, setIsRecording] = useState(false);
-  const [recordings, setRecordings] = useState<Record<string, Blob>>({});
+  const [, setRecordings] = useState<Record<string, Blob>>({});
   const [timeLeft, setTimeLeft] = useState(0);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
