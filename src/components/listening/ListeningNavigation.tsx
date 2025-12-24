@@ -511,8 +511,8 @@ export function ListeningNavigation({
                     </div>
                   </div>
                 ) : (
-                  /* Inactive part - show only part label */
-                  <div className="flex min-w-0 flex-col">
+                  /* Inactive part - show only part label (hidden on mobile) */
+                  <div className="hidden md:flex min-w-0 flex-col">
                     {/* Part label with count */}
                     <button
                       onClick={() => handlePartClick(p.index)}
