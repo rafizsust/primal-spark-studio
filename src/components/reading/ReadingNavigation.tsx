@@ -563,15 +563,15 @@ export function ReadingNavigation({
                     <button
                       onClick={() => handlePartClick(p.index)}
                       className={cn(
-                        "flex w-full items-center justify-center whitespace-nowrap text-sm px-2",
+                        "flex w-full min-w-0 items-center justify-center whitespace-nowrap text-sm px-2",
                         p.complete ? "text-green-600 font-semibold" : "text-muted-foreground"
                       )}
                       style={{ height: QUESTION_BUTTON_SIZE }}
                     >
                       {p.complete && <Check size={14} className="mr-1 text-green-600" strokeWidth={2.5} />}
-                      <span>{p.title}</span>
+                      <span className="min-w-0 truncate">{p.title}</span>
                       {!p.complete && (
-                        <span className="ml-2 tabular-nums">
+                        <span className="ml-2 tabular-nums hidden md:inline">
                           {p.answered} of {p.totalQuestions}
                         </span>
                       )}
