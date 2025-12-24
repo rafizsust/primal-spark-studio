@@ -50,10 +50,12 @@ interface QuestionItem {
 const BAR_HEIGHT = 3;
 const SEGMENT_GAP = 1.5;
 const QUESTION_BUTTON_SIZE = 25; // Square buttons
-const MOBILE_VISIBLE_ITEMS = 7; // Number of items visible on mobile
+const MOBILE_VISIBLE_ITEMS = 9; // Increased from 7 - more items visible on mobile
 
 const PART_LABEL_MIN_WIDTH = 60;
+const PART_LABEL_MIN_WIDTH_MOBILE = 16; // Minimal on mobile since text is hidden
 const NAV_HORIZONTAL_PADDING = 12;
+const NAV_HORIZONTAL_PADDING_MOBILE = 4; // Tighter on mobile
 
 export function ReadingNavigation({
   questions,
@@ -381,7 +383,7 @@ export function ReadingNavigation({
   return (
     <footer className="bg-card shrink-0">
       {/* Progress indicator bars - at top edge */}
-      <div className="flex w-full" style={{ paddingLeft: NAV_HORIZONTAL_PADDING, paddingRight: NAV_HORIZONTAL_PADDING }}>
+      <div className="flex w-full" style={{ paddingLeft: isMobile ? NAV_HORIZONTAL_PADDING_MOBILE : NAV_HORIZONTAL_PADDING, paddingRight: isMobile ? NAV_HORIZONTAL_PADDING_MOBILE : NAV_HORIZONTAL_PADDING }}>
         <div className="flex min-w-0 flex-1 overflow-x-auto scrollbar-none">
           {parts.map((p) => {
             const isActive = currentPassageIndex === p.index;
@@ -400,7 +402,7 @@ export function ReadingNavigation({
                   <div className="flex items-center">
                     <div 
                       className={cn("shrink-0", p.complete ? "bg-green-600" : "bg-[#c8c8c8]")}
-                      style={{ width: PART_LABEL_MIN_WIDTH, height: BAR_HEIGHT }}
+                      style={{ width: isMobile ? PART_LABEL_MIN_WIDTH_MOBILE : PART_LABEL_MIN_WIDTH, height: BAR_HEIGHT }}
                     />
                     {(() => {
                       const { visibleItems, hasMore } = getMobileVisibleItems(p.items);
@@ -452,7 +454,7 @@ export function ReadingNavigation({
       </div>
       
       {/* Content row - numbers centered */}
-      <div className="flex w-full items-center" style={{ paddingLeft: NAV_HORIZONTAL_PADDING, paddingRight: NAV_HORIZONTAL_PADDING }}>
+      <div className="flex w-full items-center" style={{ paddingLeft: isMobile ? NAV_HORIZONTAL_PADDING_MOBILE : NAV_HORIZONTAL_PADDING, paddingRight: isMobile ? NAV_HORIZONTAL_PADDING_MOBILE : NAV_HORIZONTAL_PADDING }}>
         {/* Parts container */}
         <div className="flex min-w-0 flex-1 items-center overflow-x-auto scrollbar-none">
           {parts.map((p) => {
@@ -481,7 +483,7 @@ export function ReadingNavigation({
                           p.complete ? "text-green-600" : "text-foreground"
                         )}
                         style={{
-                          width: PART_LABEL_MIN_WIDTH,
+                          width: isMobile ? PART_LABEL_MIN_WIDTH_MOBILE : PART_LABEL_MIN_WIDTH,
                           height: QUESTION_BUTTON_SIZE,
                         }}
                       >
