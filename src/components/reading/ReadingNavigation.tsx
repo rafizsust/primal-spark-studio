@@ -1,6 +1,7 @@
 import { useMemo, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { Check } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Question {
   id: string;
@@ -49,6 +50,7 @@ interface QuestionItem {
 const BAR_HEIGHT = 3;
 const SEGMENT_GAP = 1.5;
 const QUESTION_BUTTON_SIZE = 25; // Square buttons
+const MOBILE_VISIBLE_ITEMS = 7; // Number of items visible on mobile
 
 const PART_LABEL_MIN_WIDTH = 60;
 const NAV_HORIZONTAL_PADDING = 12;
@@ -66,6 +68,7 @@ export function ReadingNavigation({
   questionGroups = [],
 }: ReadingNavigationProps) {
   const flaggedQuestions = externalFlaggedQuestions ?? new Set<number>();
+  const isMobile = useIsMobile();
 
   const questionNumbers = useMemo(() => {
     const nums = new Set<number>();
@@ -339,6 +342,42 @@ export function ReadingNavigation({
 
   const allQuestionsAnswered = parts.length > 0 && parts.every((p) => p.complete);
 
+  // Compute sliding window for mobile - show items around current question
+  const getMobileVisibleItems = useCallback((items: QuestionItem[]): { 
+    visibleItems: QuestionItem[]; 
+    hasMore: { left: boolean; right: boolean };
+  } => {
+    if (!isMobile || items.length <= MOBILE_VISIBLE_ITEMS) {
+      return { visibleItems: items, hasMore: { left: false, right: false } };
+    }
+
+    // Find index of item containing current question
+    const currentIndex = items.findIndex(item => 
+      item.numbers.includes(currentQuestion) || 
+      (currentQuestion >= item.startNum && currentQuestion <= item.endNum)
+    );
+
+    const idx = currentIndex === -1 ? 0 : currentIndex;
+    const half = Math.floor(MOBILE_VISIBLE_ITEMS / 2);
+    
+    let start = Math.max(0, idx - half);
+    let end = start + MOBILE_VISIBLE_ITEMS;
+    
+    // Adjust if we're near the end
+    if (end > items.length) {
+      end = items.length;
+      start = Math.max(0, end - MOBILE_VISIBLE_ITEMS);
+    }
+
+    return {
+      visibleItems: items.slice(start, end),
+      hasMore: {
+        left: start > 0,
+        right: end < items.length,
+      }
+    };
+  }, [isMobile, currentQuestion]);
+
   return (
     <footer className="bg-card shrink-0">
       {/* Progress indicator bars - at top edge */}
@@ -357,28 +396,45 @@ export function ReadingNavigation({
                 }}
               >
                 {isActive ? (
-                  /* Active part bars */
+                  /* Active part bars - sliding window on mobile */
                   <div className="flex items-center">
                     <div 
                       className={cn("shrink-0", p.complete ? "bg-green-600" : "bg-[#c8c8c8]")}
                       style={{ width: PART_LABEL_MIN_WIDTH, height: BAR_HEIGHT }}
                     />
-                    {p.items.map((item) => {
-                      const answered = isItemAnswered(item);
-                      const isGrouped = item.type === "grouped";
-                      const questionCount = Math.max(1, item.endNum - item.startNum + 1);
-                      const itemWidth = isGrouped
-                        ? questionCount * QUESTION_BUTTON_SIZE + (questionCount - 1) * SEGMENT_GAP
-                        : QUESTION_BUTTON_SIZE;
-
+                    {(() => {
+                      const { visibleItems, hasMore } = getMobileVisibleItems(p.items);
                       return (
-                        <div
-                          key={`bar-${item.startNum}`}
-                          className={cn("shrink-0", answered ? "bg-green-600" : "bg-[#c8c8c8]")}
-                          style={{ width: itemWidth, height: BAR_HEIGHT, marginLeft: SEGMENT_GAP }}
-                        />
+                        <>
+                          {/* Left indicator spacer */}
+                          {hasMore.left && (
+                            <div className="shrink-0" style={{ width: 16, height: BAR_HEIGHT }} />
+                          )}
+                          
+                          {visibleItems.map((item) => {
+                            const answered = isItemAnswered(item);
+                            const isGrouped = item.type === "grouped";
+                            const questionCount = Math.max(1, item.endNum - item.startNum + 1);
+                            const itemWidth = isGrouped
+                              ? questionCount * QUESTION_BUTTON_SIZE + (questionCount - 1) * SEGMENT_GAP
+                              : QUESTION_BUTTON_SIZE;
+
+                            return (
+                              <div
+                                key={`bar-${item.startNum}`}
+                                className={cn("shrink-0", answered ? "bg-green-600" : "bg-[#c8c8c8]")}
+                                style={{ width: itemWidth, height: BAR_HEIGHT, marginLeft: SEGMENT_GAP }}
+                              />
+                            );
+                          })}
+                          
+                          {/* Right indicator spacer */}
+                          {hasMore.right && (
+                            <div className="shrink-0" style={{ width: 16 + SEGMENT_GAP, height: BAR_HEIGHT }} />
+                          )}
+                        </>
                       );
-                    })}
+                    })()}
                   </div>
                 ) : (
                   /* Inactive part bar */
@@ -410,7 +466,7 @@ export function ReadingNavigation({
                 }}
               >
                 {isActive ? (
-                  /* Active part - show all question numbers */
+                  /* Active part - show question numbers (sliding window on mobile) */
                   <div className="flex min-w-0 flex-col">
                     {/* Content row: Part label + question numbers */}
                     <div className="flex items-center">
@@ -430,45 +486,72 @@ export function ReadingNavigation({
                         {p.title}
                       </button>
                       
-                      {/* Question numbers - aligned with bars above */}
-                      {p.items.map((item) => {
-                        const isCurrent = item.numbers.includes(currentQuestion);
-                        const isFlagged = item.numbers.some((n) => flaggedQuestions.has(n));
-                        const isGrouped = item.type === "grouped";
-                        const questionCount = Math.max(1, item.endNum - item.startNum + 1);
-                        const itemWidth = isGrouped
-                          ? questionCount * QUESTION_BUTTON_SIZE + (questionCount - 1) * SEGMENT_GAP
-                          : QUESTION_BUTTON_SIZE;
-                        
-                        // Format label - plain numbers only
-                        const label = isGrouped 
-                          ? `${item.startNum}–${item.endNum}` 
-                          : String(item.numbers[0]);
-
+                      {/* Question numbers - sliding window on mobile */}
+                      {(() => {
+                        const { visibleItems, hasMore } = getMobileVisibleItems(p.items);
                         return (
-                          <button
-                            key={`btn-${item.startNum}`}
-                            onClick={() => handleQuestionClick(item.startNum)}
-                            className={cn(
-                              "shrink-0 relative flex items-center justify-center text-sm transition-colors",
-                              isGrouped ? "px-1.5" : "px-0.5",
-                              isCurrent 
-                                ? "border-[2.5px] border-[#5BA4C9] text-foreground font-semibold rounded-[3px]" 
-                                : "text-foreground/80 hover:text-foreground",
+                          <>
+                            {/* Left indicator - more items exist */}
+                            {hasMore.left && (
+                              <div 
+                                className="shrink-0 flex items-center justify-center text-muted-foreground"
+                                style={{ width: 16, height: QUESTION_BUTTON_SIZE }}
+                              >
+                                <ChevronLeft size={14} strokeWidth={2} />
+                              </div>
                             )}
-                            style={{ 
-                              width: itemWidth,
-                              height: QUESTION_BUTTON_SIZE,
-                              marginLeft: SEGMENT_GAP,
-                            }}
-                          >
-                            {isFlagged && (
-                              <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500" />
+                            
+                            {visibleItems.map((item) => {
+                              const isCurrent = item.numbers.includes(currentQuestion);
+                              const isFlagged = item.numbers.some((n) => flaggedQuestions.has(n));
+                              const isGrouped = item.type === "grouped";
+                              const questionCount = Math.max(1, item.endNum - item.startNum + 1);
+                              const itemWidth = isGrouped
+                                ? questionCount * QUESTION_BUTTON_SIZE + (questionCount - 1) * SEGMENT_GAP
+                                : QUESTION_BUTTON_SIZE;
+                              
+                              // Format label - plain numbers only
+                              const label = isGrouped 
+                                ? `${item.startNum}–${item.endNum}` 
+                                : String(item.numbers[0]);
+
+                              return (
+                                <button
+                                  key={`btn-${item.startNum}`}
+                                  onClick={() => handleQuestionClick(item.startNum)}
+                                  className={cn(
+                                    "shrink-0 relative flex items-center justify-center text-sm transition-colors",
+                                    isGrouped ? "px-1.5" : "px-0.5",
+                                    isCurrent 
+                                      ? "border-[2.5px] border-[#5BA4C9] text-foreground font-semibold rounded-[3px]" 
+                                      : "text-foreground/80 hover:text-foreground",
+                                  )}
+                                  style={{ 
+                                    width: itemWidth,
+                                    height: QUESTION_BUTTON_SIZE,
+                                    marginLeft: SEGMENT_GAP,
+                                  }}
+                                >
+                                  {isFlagged && (
+                                    <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500" />
+                                  )}
+                                  <span className="tabular-nums whitespace-nowrap">{label}</span>
+                                </button>
+                              );
+                            })}
+                            
+                            {/* Right indicator - more items exist */}
+                            {hasMore.right && (
+                              <div 
+                                className="shrink-0 flex items-center justify-center text-muted-foreground"
+                                style={{ width: 16, height: QUESTION_BUTTON_SIZE, marginLeft: SEGMENT_GAP }}
+                              >
+                                <ChevronRight size={14} strokeWidth={2} />
+                              </div>
                             )}
-                            <span className="tabular-nums whitespace-nowrap">{label}</span>
-                          </button>
+                          </>
                         );
-                      })}
+                      })()}
                     </div>
                   </div>
                 ) : (
