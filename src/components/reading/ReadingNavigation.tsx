@@ -437,9 +437,9 @@ export function ReadingNavigation({
                     })()}
                   </div>
                 ) : (
-                  /* Inactive part bar - show gray bar for incomplete, green for complete */
+                  /* Inactive part bar */
                   <div 
-                    className={cn("w-full shrink-0", p.complete ? "bg-green-600" : "bg-[#c8c8c8]")}
+                    className={cn("w-full shrink-0", p.complete ? "bg-green-600" : "bg-transparent")}
                     style={{ height: BAR_HEIGHT }}
                   />
                 )}
@@ -557,20 +557,18 @@ export function ReadingNavigation({
                 ) : (
                   /* Inactive part - show only part label */
                   <div className="flex min-w-0 flex-col">
-                    {/* Part label with count - hide count on mobile */}
+                    {/* Part label with count */}
                     <button
                       onClick={() => handlePartClick(p.index)}
                       className={cn(
-                        "flex w-full items-center justify-center whitespace-nowrap px-1 md:px-2",
-                        isMobile ? "text-xs" : "text-sm",
+                        "flex w-full items-center justify-center whitespace-nowrap text-sm px-2",
                         p.complete ? "text-green-600 font-semibold" : "text-muted-foreground"
                       )}
                       style={{ height: QUESTION_BUTTON_SIZE }}
                     >
-                      {p.complete && <Check size={isMobile ? 12 : 14} className="mr-0.5 md:mr-1 text-green-600" strokeWidth={2.5} />}
+                      {p.complete && <Check size={14} className="mr-1 text-green-600" strokeWidth={2.5} />}
                       <span>{p.title}</span>
-                      {/* Only show count on desktop */}
-                      {!isMobile && !p.complete && (
+                      {!p.complete && (
                         <span className="ml-2 tabular-nums">
                           {p.answered} of {p.totalQuestions}
                         </span>
