@@ -20,9 +20,11 @@ import { NoteSidebar } from '@/components/common/NoteSidebar';
 import { SubmitConfirmDialog } from '@/components/common/SubmitConfirmDialog';
 import { RestoreTestStateDialog } from '@/components/common/RestoreTestStateDialog';
 import { TestEntryOverlay } from '@/components/common/TestEntryOverlay';
+import { PullToRefreshIndicator } from '@/components/common/PullToRefreshIndicator';
 import { Badge } from '@/components/ui/badge';
 import { useFullscreenTest } from '@/hooks/useFullscreenTest';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
@@ -155,6 +157,23 @@ export default function ReadingTest() {
       }
     },
     minSwipeDistance: 80,
+  });
+
+  // Pull-to-refresh for mobile
+  const handlePullRefresh = useCallback(async () => {
+    toast.info('Refreshing test data...');
+    await fetchTestData();
+    toast.success('Test data refreshed');
+  }, []);
+
+  const {
+    pullHandlers,
+    isRefreshing,
+    pullDistance,
+    progress,
+  } = usePullToRefresh({
+    onRefresh: handlePullRefresh,
+    disabled: !isMobile || !testStarted,
   });
   const questionTypeMap: Record<string, string> = {
     'true-false-not-given': 'TRUE_FALSE_NOT_GIVEN',
@@ -1063,7 +1082,14 @@ export default function ReadingTest() {
             <div 
               className="md:hidden h-full flex flex-col relative"
               {...swipeHandlers}
+              {...pullHandlers}
             >
+              {/* Pull-to-refresh indicator */}
+              <PullToRefreshIndicator 
+                pullDistance={pullDistance}
+                isRefreshing={isRefreshing}
+                progress={progress}
+              />
               {/* Mobile Passage View */}
               {mobileView === 'passage' && (
                 <div 

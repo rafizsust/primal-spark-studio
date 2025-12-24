@@ -21,9 +21,11 @@ import { HighlightNoteProvider } from '@/hooks/useHighlightNotes';
 import { NoteSidebar } from '@/components/common/NoteSidebar';
 import { SubmitConfirmDialog } from '@/components/common/SubmitConfirmDialog';
 import { RestoreTestStateDialog } from '@/components/common/RestoreTestStateDialog';
+import { PullToRefreshIndicator } from '@/components/common/PullToRefreshIndicator';
 import { Badge } from '@/components/ui/badge';
 import { useFullscreenTest } from '@/hooks/useFullscreenTest';
 import { useSwipeGesture } from '@/hooks/useSwipeGesture';
+import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useIsMobile } from '@/hooks/use-mobile';
 
 
@@ -149,6 +151,23 @@ export default function ListeningTest() {
       }
     },
     minSwipeDistance: 80,
+  });
+
+  // Pull-to-refresh for mobile
+  const handlePullRefresh = useCallback(async () => {
+    toast.info('Refreshing test data...');
+    await fetchTestData();
+    toast.success('Test data refreshed');
+  }, []);
+
+  const {
+    pullHandlers,
+    isRefreshing,
+    pullDistance,
+    progress,
+  } = usePullToRefresh({
+    onRefresh: handlePullRefresh,
+    disabled: !isMobile || !testStarted,
   });
 
   const questionTypeMap: Record<string, string> = {
@@ -869,9 +888,16 @@ export default function ListeningTest() {
 
             {/* Mobile: Switch between Questions and Audio based on mobileView */}
             <div 
-              className="md:hidden h-full flex flex-col"
+              className="md:hidden h-full flex flex-col relative"
               {...swipeHandlers}
+              {...pullHandlers}
             >
+              {/* Pull-to-refresh indicator */}
+              <PullToRefreshIndicator 
+                pullDistance={pullDistance}
+                isRefreshing={isRefreshing}
+                progress={progress}
+              />
               {mobileView === 'questions' ? (
                 <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-20 bg-white font-[var(--font-ielts)] text-foreground">
                   <ListeningQuestions 
