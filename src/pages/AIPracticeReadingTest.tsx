@@ -28,7 +28,7 @@ import {
 } from '@/types/aiPractice';
 import { renderRichText } from '@/components/admin/RichTextEditor';
 
-// Convert AI-generated question to the format expected by ReadingQuestions
+// Interfaces matching ReadingQuestions component
 interface Question {
   id: string;
   question_number: number;
@@ -69,7 +69,7 @@ export default function AIPracticeReadingTest() {
   const [questionGroups, setQuestionGroups] = useState<QuestionGroup[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [currentQuestion, setCurrentQuestion] = useState(1);
-  const [currentPassageIndex] = useState(0);
+  const [currentPassageIndex, setCurrentPassageIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
@@ -77,6 +77,7 @@ export default function AIPracticeReadingTest() {
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [isNoteSidebarOpen, setIsNoteSidebarOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'passage' | 'questions'>('passage');
+  const [flaggedQuestions] = useState<Set<number>>(new Set());
   
   // Theme settings
   const [contrastMode, setContrastMode] = useState<ContrastMode>('black-on-white');
@@ -169,7 +170,9 @@ export default function AIPracticeReadingTest() {
   }, [testId, navigate, initializeTest]);
 
   const currentPassage = passages[currentPassageIndex];
-  const currentPassageQuestions = questions;
+  const currentPassageQuestions = currentPassage
+    ? questions.filter(q => q.passage_id === currentPassage.id)
+    : questions;
 
   const handleAnswerChange = (questionNumber: number, answer: string) => {
     setAnswers(prev => ({ ...prev, [questionNumber]: answer }));
@@ -288,6 +291,41 @@ export default function AIPracticeReadingTest() {
     return 2;
   }, [questionGroups]);
 
+  // Get question range for display
+  const getPassageQuestionRange = () => {
+    if (currentPassageQuestions.length === 0) return '';
+    const nums = currentPassageQuestions.map(q => q.question_number).sort((a, b) => a - b);
+    if (nums.length === 0) return '';
+    if (nums.length === 1) return `${nums[0]}`;
+    return `${nums[0]}-${nums[nums.length - 1]}`;
+  };
+
+  // Apply theme classes to body
+  useEffect(() => {
+    const themeClasses = ['ielts-theme-black-on-white', 'ielts-theme-white-on-black', 'ielts-theme-yellow-on-black'];
+    const textClasses = ['ielts-text-regular', 'ielts-text-large', 'ielts-text-extra-large'];
+    
+    document.body.classList.remove(...themeClasses, ...textClasses);
+    
+    const currentTheme = {
+      'black-on-white': 'ielts-theme-black-on-white',
+      'white-on-black': 'ielts-theme-white-on-black',
+      'yellow-on-black': 'ielts-theme-yellow-on-black',
+    }[contrastMode];
+    
+    const currentTextSize = {
+      'regular': 'ielts-text-regular',
+      'large': 'ielts-text-large',
+      'extra-large': 'ielts-text-extra-large',
+    }[textSizeMode];
+    
+    document.body.classList.add(currentTheme, currentTextSize);
+    
+    return () => {
+      document.body.classList.remove(...themeClasses, ...textClasses);
+    };
+  }, [contrastMode, textSizeMode]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-secondary flex items-center justify-center">
@@ -347,12 +385,10 @@ export default function AIPracticeReadingTest() {
           </header>
 
           {/* Topic/Difficulty Banner */}
-          <div className="bg-primary/5 border-b border-primary/20 px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{test.topic}</span>
-              <Badge variant="outline" className="text-xs capitalize">{test.difficulty}</Badge>
-              <Badge variant="secondary" className="text-xs">{test.questionType.replace(/_/g, ' ')}</Badge>
-            </div>
+          <div className="bg-primary/5 border-b border-primary/20 px-4 py-2 flex items-center gap-2">
+            <span className="text-sm font-medium">{test.topic}</span>
+            <Badge variant="outline" className="text-xs capitalize">{test.difficulty}</Badge>
+            <Badge variant="secondary" className="text-xs">{test.questionType.replace(/_/g, ' ')}</Badge>
           </div>
 
           {/* Mobile Tabs */}
@@ -383,8 +419,8 @@ export default function AIPracticeReadingTest() {
 
           {/* Part Header */}
           <div className="ielts-part-header">
-            <h2>Reading Practice</h2>
-            <p>Read the passage and answer questions 1-{questions.length}.</p>
+            <h2>Part 1</h2>
+            <p>Read the text and answer questions {getPassageQuestionRange()}.</p>
           </div>
 
           {/* Main Content */}
@@ -461,16 +497,26 @@ export default function AIPracticeReadingTest() {
                       <button 
                         className={cn(
                           "ielts-nav-arrow",
-                          currentQuestion === 1 && "opacity-40 cursor-not-allowed"
+                          questions.findIndex(q => q.question_number === currentQuestion) === 0 && "opacity-40 cursor-not-allowed"
                         )}
-                        onClick={() => currentQuestion > 1 && setCurrentQuestion(currentQuestion - 1)}
-                        disabled={currentQuestion === 1}
+                        onClick={() => {
+                          const idx = questions.findIndex(q => q.question_number === currentQuestion);
+                          if (idx > 0) {
+                            setCurrentQuestion(questions[idx - 1].question_number);
+                          }
+                        }}
+                        disabled={questions.findIndex(q => q.question_number === currentQuestion) === 0}
                       >
                         <ArrowLeft size={24} strokeWidth={2.5} />
                       </button>
                       <button 
                         className="ielts-nav-arrow ielts-nav-arrow-primary"
-                        onClick={() => currentQuestion < questions.length && setCurrentQuestion(currentQuestion + 1)}
+                        onClick={() => {
+                          const idx = questions.findIndex(q => q.question_number === currentQuestion);
+                          if (idx < questions.length - 1) {
+                            setCurrentQuestion(questions[idx + 1].question_number);
+                          }
+                        }}
                       >
                         <ArrowRight size={24} strokeWidth={2.5} />
                       </button>
@@ -480,10 +526,15 @@ export default function AIPracticeReadingTest() {
               </ResizablePanelGroup>
             </div>
 
-            {/* Mobile View */}
+            {/* Mobile: Single Panel View */}
             <div className="md:hidden h-full flex flex-col relative">
               {mobileView === 'passage' ? (
-                <div className="flex-1 overflow-y-auto p-4 bg-white font-[var(--font-ielts)]">
+                <div 
+                  className={cn(
+                    "flex-1 overflow-y-auto overflow-x-hidden p-4 ielts-card reading-passage",
+                    "font-[var(--font-ielts)]"
+                  )}
+                >
                   {currentPassage && (
                     <ReadingPassage 
                       testId={testId!}
@@ -504,7 +555,12 @@ export default function AIPracticeReadingTest() {
                   )}
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto p-4 pb-20 bg-white font-[var(--font-ielts)]">
+                <div 
+                  className={cn(
+                    "flex-1 overflow-y-auto overflow-x-hidden p-4 pb-20 ielts-card question-text",
+                    "font-[var(--font-ielts)]"
+                  )}
+                >
                   <ReadingQuestions 
                     testId={testId!}
                     questions={currentPassageQuestions}
@@ -523,33 +579,39 @@ export default function AIPracticeReadingTest() {
           </div>
         </div>
 
-        {/* Bottom Navigation */}
+        {/* Bottom Navigation - stays fixed */}
         <ReadingNavigation
           questions={questions}
+          passages={passages}
           answers={answers}
           currentQuestion={currentQuestion}
           setCurrentQuestion={setCurrentQuestion}
+          currentPassageIndex={currentPassageIndex}
+          onPassageChange={setCurrentPassageIndex}
           onSubmit={() => setShowSubmitDialog(true)}
-        />
-
-        {/* Note Sidebar */}
-        <NoteSidebar 
-          testId={testId!}
-          isOpen={isNoteSidebarOpen}
-          onOpenChange={setIsNoteSidebarOpen}
-          renderRichText={renderRichText}
-        />
-
-        {/* Submit Dialog */}
-        <SubmitConfirmDialog
-          open={showSubmitDialog}
-          onOpenChange={setShowSubmitDialog}
-          onConfirm={handleSubmit}
-          totalCount={submitStats.totalCount}
-          answeredCount={submitStats.answeredCount}
-          timeRemaining={timeLeft}
+          questionGroups={questionGroups}
+          flaggedQuestions={flaggedQuestions}
         />
       </div>
+      
+      {testId && (
+        <NoteSidebar 
+          testId={testId} 
+          isOpen={isNoteSidebarOpen} 
+          onOpenChange={setIsNoteSidebarOpen} 
+          renderRichText={renderRichText}
+        />
+      )}
+      
+      <SubmitConfirmDialog
+        open={showSubmitDialog}
+        onOpenChange={setShowSubmitDialog}
+        onConfirm={handleSubmit}
+        timeRemaining={timeLeft}
+        answeredCount={submitStats.answeredCount}
+        totalCount={submitStats.totalCount}
+        contrastMode={contrastMode}
+      />
     </HighlightNoteProvider>
   );
 }

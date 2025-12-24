@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
@@ -22,6 +22,7 @@ import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/hooks/useAuth';
 import { 
   loadGeneratedTest,
+  loadGeneratedTestAsync,
   savePracticeResultAsync,
   GeneratedTest,
   PracticeResult,
@@ -113,12 +114,14 @@ export default function AIPracticeListeningTest() {
   const [questionGroups, setQuestionGroups] = useState<QuestionGroup[]>([]);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [currentQuestion, setCurrentQuestion] = useState(1);
+  const [activePartIndex, setActivePartIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
   const [testStarted] = useState(true);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [isNoteSidebarOpen, setIsNoteSidebarOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'questions' | 'audio'>('questions');
+  const [flaggedQuestions] = useState<Set<number>>(new Set());
   
   // Audio state
   const [isPlaying, setIsPlaying] = useState(false);
@@ -134,20 +137,20 @@ export default function AIPracticeListeningTest() {
   
   const startTimeRef = useRef<number>(Date.now());
 
-  // Load AI-generated test and convert to Listening format
-  useEffect(() => {
-    if (!testId) {
-      navigate('/ai-practice');
-      return;
+  // Calculate part ranges based on actual questions
+  const partRanges = useMemo(() => {
+    if (questions.length === 0) {
+      return [{ label: 'Part 1', start: 1, end: 10 }];
     }
+    
+    const maxQ = Math.max(...questions.map(q => q.question_number));
+    
+    // For AI practice, we use a single "Part 1" containing all questions
+    return [{ label: 'Part 1', start: 1, end: maxQ }];
+  }, [questions]);
 
-    const loadedTest = loadGeneratedTest(testId);
-    if (!loadedTest || loadedTest.module !== 'listening') {
-      toast.error('Listening test not found');
-      navigate('/ai-practice');
-      return;
-    }
-
+  // Helper to initialize state from test data
+  const initializeTest = useCallback((loadedTest: GeneratedTest) => {
     setTest(loadedTest);
     setTimeLeft(loadedTest.timeMinutes * 60);
     startTimeRef.current = Date.now();
@@ -219,6 +222,31 @@ export default function AIPracticeListeningTest() {
     }
 
     setLoading(false);
+  }, []);
+
+  // Load AI-generated test: first from memory cache, else from Supabase
+  useEffect(() => {
+    if (!testId) {
+      navigate('/ai-practice');
+      return;
+    }
+
+    // Try memory cache first
+    const cachedTest = loadGeneratedTest(testId);
+    if (cachedTest && cachedTest.module === 'listening') {
+      initializeTest(cachedTest);
+      return;
+    }
+
+    // Fallback: load from Supabase
+    loadGeneratedTestAsync(testId).then((t) => {
+      if (!t || t.module !== 'listening') {
+        toast.error('Listening test not found');
+        navigate('/ai-practice');
+        return;
+      }
+      initializeTest(t);
+    });
 
     return () => {
       if (audioUrlRef.current) {
@@ -228,7 +256,7 @@ export default function AIPracticeListeningTest() {
         audioRef.current.pause();
       }
     };
-  }, [testId, navigate]);
+  }, [testId, navigate, initializeTest]);
 
   const handleAnswerChange = (questionNumber: number, answer: string) => {
     setAnswers(prev => ({ ...prev, [questionNumber]: answer }));
@@ -334,6 +362,34 @@ export default function AIPracticeListeningTest() {
     return { totalCount, answeredCount };
   }, [answers, questions]);
 
+  const currentPart = partRanges[activePartIndex];
+
+  // Apply theme classes to body
+  useEffect(() => {
+    const themeClasses = ['ielts-theme-black-on-white', 'ielts-theme-white-on-black', 'ielts-theme-yellow-on-black'];
+    const textClasses = ['ielts-text-regular', 'ielts-text-large', 'ielts-text-extra-large'];
+    
+    document.body.classList.remove(...themeClasses, ...textClasses);
+    
+    const currentTheme = {
+      'black-on-white': 'ielts-theme-black-on-white',
+      'white-on-black': 'ielts-theme-white-on-black',
+      'yellow-on-black': 'ielts-theme-yellow-on-black',
+    }[contrastMode];
+    
+    const currentTextSize = {
+      'regular': 'ielts-text-regular',
+      'large': 'ielts-text-large',
+      'extra-large': 'ielts-text-extra-large',
+    }[textSizeMode];
+    
+    document.body.classList.add(currentTheme, currentTextSize);
+    
+    return () => {
+      document.body.classList.remove(...themeClasses, ...textClasses);
+    };
+  }, [contrastMode, textSizeMode]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-secondary flex items-center justify-center">
@@ -345,7 +401,7 @@ export default function AIPracticeListeningTest() {
   if (!test) {
     return (
       <div className="min-h-screen bg-secondary flex items-center justify-center">
-        <div className="text-destructive">Test not found</div>
+        <div className="text-destructive">Listening test not found</div>
       </div>
     );
   }
@@ -354,7 +410,7 @@ export default function AIPracticeListeningTest() {
     <HighlightNoteProvider testId={testId!}>
       <div className={cn("h-screen flex flex-col overflow-hidden", getThemeClasses(), "ielts-test-content")}>
         <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Top Header */}
+          {/* Top Header - IELTS Official Style with AI Practice badge */}
           <header className="border-b px-2 md:px-4 py-1 md:py-3 flex items-center justify-between ielts-card ielts-header">
             <div className="flex items-center gap-2 md:gap-4">
               <div className="ielts-logo">
@@ -416,27 +472,32 @@ export default function AIPracticeListeningTest() {
           </header>
 
           {/* Topic/Difficulty Banner */}
-          <div className="bg-primary/5 border-b border-primary/20 px-4 py-2 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">{test.topic}</span>
-              <Badge variant="outline" className="text-xs capitalize">{test.difficulty}</Badge>
-              <Badge variant="secondary" className="text-xs">{test.questionType.replace(/_/g, ' ')}</Badge>
-            </div>
+          <div className="bg-primary/5 border-b border-primary/20 px-4 py-2 flex items-center gap-2">
+            <span className="text-sm font-medium">{test.topic}</span>
+            <Badge variant="outline" className="text-xs capitalize">{test.difficulty}</Badge>
+            <Badge variant="secondary" className="text-xs">{test.questionType.replace(/_/g, ' ')}</Badge>
           </div>
 
-          {/* Mobile Tabs */}
+          {/* Mobile Part/Questions Tabs */}
           <div className="md:hidden flex border-b border-border bg-muted/40">
-            <button
-              className={cn(
-                "flex-1 py-1.5 text-xs font-medium text-center transition-colors",
-                mobileView === 'questions'
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
-              )}
-              onClick={() => setMobileView('questions')}
-            >
-              Questions
-            </button>
+            {partRanges.map((part, idx) => (
+              <button
+                key={part.label}
+                className={cn(
+                  "flex-1 py-1.5 text-xs font-medium text-center transition-colors",
+                  idx === activePartIndex && mobileView === 'questions'
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/60"
+                )}
+                onClick={() => {
+                  setActivePartIndex(idx);
+                  setMobileView('questions');
+                  setCurrentQuestion(part.start);
+                }}
+              >
+                {part.label}
+              </button>
+            ))}
             <button
               className={cn(
                 "flex-1 py-1.5 text-xs font-medium text-center transition-colors",
@@ -450,15 +511,15 @@ export default function AIPracticeListeningTest() {
             </button>
           </div>
 
-          {/* Part Header */}
+          {/* Part Header - IELTS Official Style */}
           <div className="ielts-part-header hidden md:block">
-            <h2>Listening Practice</h2>
-            <p className="not-italic">Listen and answer questions 1–{questions.length}.</p>
+            <h2>{currentPart.label}</h2>
+            <p className="not-italic">Listen and answer questions {currentPart.start}–{currentPart.end}.</p>
           </div>
 
           {/* Main Content */}
           <div className="flex-1 min-h-0 overflow-hidden">
-            {/* Desktop View */}
+            {/* Desktop: Full questions view */}
             <div className="hidden md:block h-full">
               <ResizablePanelGroup direction="horizontal" className="h-full">
                 <ResizablePanel defaultSize={100} minSize={100} maxSize={100}>
@@ -483,11 +544,11 @@ export default function AIPracticeListeningTest() {
                           />
                         </div>
                       )}
-                      
+
                       <ListeningQuestions 
                         testId={testId!}
-                        questions={questions}
-                        questionGroups={questionGroups}
+                        questions={questions.filter(q => q.question_number >= currentPart.start && q.question_number <= currentPart.end)}
+                        questionGroups={questionGroups.filter(g => g.start_question >= currentPart.start && g.end_question <= currentPart.end)}
                         answers={answers}
                         onAnswerChange={handleAnswerChange}
                         currentQuestion={currentQuestion}
@@ -502,16 +563,26 @@ export default function AIPracticeListeningTest() {
                       <button 
                         className={cn(
                           "ielts-nav-arrow",
-                          currentQuestion === 1 && "opacity-40 cursor-not-allowed"
+                          currentQuestion === questions[0]?.question_number && "opacity-40 cursor-not-allowed"
                         )}
-                        onClick={() => currentQuestion > 1 && setCurrentQuestion(currentQuestion - 1)}
-                        disabled={currentQuestion === 1}
+                        onClick={() => {
+                          const idx = questions.findIndex(q => q.question_number === currentQuestion);
+                          if (idx > 0) {
+                            setCurrentQuestion(questions[idx - 1].question_number);
+                          }
+                        }}
+                        disabled={currentQuestion === questions[0]?.question_number}
                       >
                         <ArrowLeft size={24} strokeWidth={2.5} />
                       </button>
                       <button 
                         className="ielts-nav-arrow ielts-nav-arrow-primary"
-                        onClick={() => currentQuestion < questions.length && setCurrentQuestion(currentQuestion + 1)}
+                        onClick={() => {
+                          const idx = questions.findIndex(q => q.question_number === currentQuestion);
+                          if (idx < questions.length - 1) {
+                            setCurrentQuestion(questions[idx + 1].question_number);
+                          }
+                        }}
                       >
                         <ArrowRight size={24} strokeWidth={2.5} />
                       </button>
@@ -521,10 +592,11 @@ export default function AIPracticeListeningTest() {
               </ResizablePanelGroup>
             </div>
 
-            {/* Mobile View */}
+            {/* Mobile: Switch between Questions and Audio */}
             <div className="md:hidden h-full flex flex-col relative">
               {mobileView === 'questions' ? (
-                <div className="flex-1 overflow-y-auto p-4 pb-20 bg-white font-[var(--font-ielts)]">
+                <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-20 bg-white font-[var(--font-ielts)] text-foreground">
+                  {/* Mobile Transcript if no audio */}
                   {audioError && test.transcript && (
                     <div className="mb-4 p-3 bg-muted/50 rounded-lg border">
                       <h3 className="font-semibold mb-2 text-sm flex items-center gap-2">
@@ -537,10 +609,11 @@ export default function AIPracticeListeningTest() {
                       />
                     </div>
                   )}
+
                   <ListeningQuestions 
                     testId={testId!}
-                    questions={questions}
-                    questionGroups={questionGroups}
+                    questions={questions.filter(q => q.question_number >= currentPart.start && q.question_number <= currentPart.end)}
+                    questionGroups={questionGroups.filter(g => g.start_question >= currentPart.start && g.end_question <= currentPart.end)}
                     answers={answers}
                     onAnswerChange={handleAnswerChange}
                     currentQuestion={currentQuestion}
@@ -551,22 +624,23 @@ export default function AIPracticeListeningTest() {
                 </div>
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-4 bg-white">
+                  <p className="text-sm text-muted-foreground mb-4">Audio Player</p>
                   {audioError ? (
-                    <div className="text-center">
-                      <AlertCircle className="w-12 h-12 text-amber-600 mx-auto mb-4" />
-                      <p className="text-sm text-muted-foreground">{audioError}</p>
+                    <div className="flex flex-col items-center gap-2 text-amber-600">
+                      <AlertCircle className="w-8 h-8" />
+                      <span className="text-sm text-center">{audioError}</span>
                     </div>
                   ) : (
-                    <div className="w-full max-w-md space-y-4">
+                    <div className="w-full max-w-md flex flex-col items-center gap-4">
                       <Button
                         variant="outline"
                         size="lg"
                         onClick={togglePlayPause}
                         disabled={!audioReady}
-                        className="w-full gap-2"
+                        className="gap-2"
                       >
                         {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
-                        {isPlaying ? 'Pause Audio' : 'Play Audio'}
+                        {isPlaying ? 'Pause' : 'Play Audio'}
                       </Button>
                       <Progress value={audioProgress} className="w-full" />
                     </div>
@@ -577,36 +651,39 @@ export default function AIPracticeListeningTest() {
           </div>
         </div>
 
-        {/* Bottom Navigation */}
+        {/* Bottom Navigation - stays fixed */}
         <ListeningNavigation
           questions={questions}
           answers={answers}
           currentQuestion={currentQuestion}
           setCurrentQuestion={setCurrentQuestion}
+          activePartIndex={activePartIndex}
+          onPartSelect={setActivePartIndex}
+          partRanges={partRanges}
+          flaggedQuestions={flaggedQuestions}
           onSubmit={() => setShowSubmitDialog(true)}
-          activePartIndex={0}
-          onPartSelect={() => {}}
-          partRanges={[{ label: 'Part 1', start: 1, end: questions.length }]}
-        />
-
-        {/* Note Sidebar */}
-        <NoteSidebar 
-          testId={testId!}
-          isOpen={isNoteSidebarOpen}
-          onOpenChange={setIsNoteSidebarOpen}
-          renderRichText={renderRichText}
-        />
-
-        {/* Submit Dialog */}
-        <SubmitConfirmDialog
-          open={showSubmitDialog}
-          onOpenChange={setShowSubmitDialog}
-          onConfirm={handleSubmit}
-          totalCount={submitStats.totalCount}
-          answeredCount={submitStats.answeredCount}
-          timeRemaining={timeLeft}
+          questionGroups={questionGroups}
         />
       </div>
+      
+      {testId && (
+        <NoteSidebar 
+          testId={testId} 
+          isOpen={isNoteSidebarOpen} 
+          onOpenChange={setIsNoteSidebarOpen} 
+          renderRichText={renderRichText}
+        />
+      )}
+      
+      <SubmitConfirmDialog
+        open={showSubmitDialog}
+        onOpenChange={setShowSubmitDialog}
+        onConfirm={handleSubmit}
+        timeRemaining={timeLeft}
+        answeredCount={submitStats.answeredCount}
+        totalCount={submitStats.totalCount}
+        contrastMode={contrastMode}
+      />
     </HighlightNoteProvider>
   );
 }
