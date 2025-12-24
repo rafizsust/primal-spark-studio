@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
-import { BookSection, QuestionTypeFilter } from '@/components/test-list';
+import { BookSectionNew, QuestionTypeFilter } from '@/components/test-list';
 import { Card, CardContent } from '@/components/ui/card';
 import { Headphones, Sparkles } from 'lucide-react';
+import { useUserTestScores } from '@/hooks/useUserTestScores';
 
 interface QuestionGroup {
   id: string;
@@ -29,10 +30,17 @@ interface ListeningTest {
   question_groups?: QuestionGroup[];
 }
 
+// Helper to extract book number for sorting (e.g., "Cambridge 20" -> 20)
+const extractBookNumber = (bookName: string): number => {
+  const match = bookName.match(/(\d+)/);
+  return match ? parseInt(match[1], 10) : 0;
+};
+
 export default function ListeningTestList() {
   const [tests, setTests] = useState<ListeningTest[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const { listening: userScores, loading: scoresLoading } = useUserTestScores();
 
   useEffect(() => {
     fetchTests();
@@ -45,7 +53,7 @@ export default function ListeningTestList() {
         .from('listening_tests')
         .select('*')
         .eq('is_published', true)
-        .order('book_name', { ascending: true })
+        .order('book_name', { ascending: false })
         .order('test_number', { ascending: true });
 
       if (testsError) throw testsError;
@@ -74,15 +82,22 @@ export default function ListeningTestList() {
     }
   };
 
-  // Group tests by book
+  // Group tests by book and sort books by number descending (newest first)
   const groupedTests = useMemo(() => {
-    return tests.reduce((acc, test) => {
+    const groups = tests.reduce((acc, test) => {
       if (!acc[test.book_name]) {
         acc[test.book_name] = [];
       }
       acc[test.book_name].push(test);
       return acc;
     }, {} as Record<string, ListeningTest[]>);
+
+    // Sort book names by number descending
+    const sortedEntries = Object.entries(groups).sort(([a], [b]) => {
+      return extractBookNumber(b) - extractBookNumber(a);
+    });
+
+    return sortedEntries;
   }, [tests]);
 
   // Get all unique question types
@@ -109,14 +124,14 @@ export default function ListeningTestList() {
       <Navbar />
 
       <main className="flex-1 container mx-auto px-4 py-12">
-        <div className="max-w-5xl mx-auto space-y-8">
+        <div className="max-w-6xl mx-auto space-y-8">
           {/* Header */}
           <div className="text-center space-y-4">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-teal/10 text-teal text-sm font-medium">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 text-primary text-sm font-medium">
               <Sparkles className="w-4 h-4" />
               IELTS Academic Listening
             </div>
-            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-foreground via-foreground to-teal bg-clip-text text-transparent">
+            <h1 className="text-4xl md:text-5xl font-bold bg-gradient-to-r from-foreground via-foreground to-primary bg-clip-text text-transparent">
               Listening Practice Tests
             </h1>
             <p className="text-muted-foreground text-lg max-w-2xl mx-auto">
@@ -139,10 +154,10 @@ export default function ListeningTestList() {
           )}
 
           {/* Content */}
-          {loading ? (
+          {loading || scoresLoading ? (
             <div className="flex flex-col items-center justify-center py-20 gap-4">
-              <div className="w-12 h-12 rounded-xl bg-teal/20 flex items-center justify-center animate-pulse">
-                <Headphones className="w-6 h-6 text-teal" />
+              <div className="w-12 h-12 rounded-xl bg-primary/20 flex items-center justify-center animate-pulse">
+                <Headphones className="w-6 h-6 text-primary" />
               </div>
               <p className="text-muted-foreground">Loading tests...</p>
             </div>
@@ -159,14 +174,15 @@ export default function ListeningTestList() {
               </CardContent>
             </Card>
           ) : (
-            <div className="space-y-10">
-              {Object.entries(groupedTests).map(([bookName, bookTests]) => (
-                <BookSection
+            <div className="space-y-6">
+              {groupedTests.map(([bookName, bookTests]) => (
+                <BookSectionNew
                   key={bookName}
                   bookName={bookName}
                   tests={bookTests}
                   testType="listening"
                   selectedQuestionTypes={selectedTypes}
+                  userScores={userScores}
                 />
               ))}
             </div>
