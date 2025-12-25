@@ -128,6 +128,7 @@ export default function AIPracticeListeningTest() {
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   
@@ -272,8 +273,22 @@ export default function AIPracticeListeningTest() {
     setIsPlaying(!isPlaying);
   };
 
+  const handleSpeedChange = (speed: number) => {
+    setPlaybackSpeed(speed);
+    if (audioRef.current) {
+      audioRef.current.playbackRate = speed;
+    }
+  };
+
   const handleSubmit = async () => {
     if (!test) return;
+
+    // Stop audio playback on submission
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    setIsPlaying(false);
 
     const timeSpent = Math.floor((Date.now() - startTimeRef.current) / 1000);
     
@@ -423,7 +438,7 @@ export default function AIPracticeListeningTest() {
             </div>
 
             {/* Audio Player in header */}
-            <div className="hidden md:flex flex-1 max-w-md mx-4 items-center gap-3">
+            <div className="hidden md:flex flex-1 max-w-lg mx-4 items-center gap-3">
               {audioError ? (
                 <div className="flex items-center gap-2 text-sm text-amber-600">
                   <AlertCircle className="w-4 h-4" />
@@ -442,6 +457,21 @@ export default function AIPracticeListeningTest() {
                     {isPlaying ? 'Pause' : 'Play'}
                   </Button>
                   <Progress value={audioProgress} className="flex-1" />
+                  
+                  {/* Playback Speed Control */}
+                  <select
+                    value={playbackSpeed}
+                    onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
+                    className="text-xs bg-muted border border-border rounded px-2 py-1 cursor-pointer"
+                    title="Playback Speed"
+                  >
+                    <option value={0.5}>0.5x</option>
+                    <option value={0.75}>0.75x</option>
+                    <option value={1}>1x</option>
+                    <option value={1.25}>1.25x</option>
+                    <option value={1.5}>1.5x</option>
+                  </select>
+                  
                   <Volume2 className="w-4 h-4 text-muted-foreground" />
                 </>
               )}
@@ -643,6 +673,22 @@ export default function AIPracticeListeningTest() {
                         {isPlaying ? 'Pause' : 'Play Audio'}
                       </Button>
                       <Progress value={audioProgress} className="w-full" />
+                      
+                      {/* Mobile Speed Control */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">Speed:</span>
+                        <select
+                          value={playbackSpeed}
+                          onChange={(e) => handleSpeedChange(parseFloat(e.target.value))}
+                          className="text-sm bg-muted border border-border rounded px-3 py-1.5 cursor-pointer"
+                        >
+                          <option value={0.5}>0.5x</option>
+                          <option value={0.75}>0.75x</option>
+                          <option value={1}>1x</option>
+                          <option value={1.25}>1.25x</option>
+                          <option value={1.5}>1.5x</option>
+                        </select>
+                      </div>
                     </div>
                   )}
                 </div>

@@ -638,9 +638,12 @@ Return ONLY valid JSON in this exact format:
 }`;
 
     case 'DRAG_AND_DROP_OPTIONS':
-      return basePrompt + `2. Create ${questionCount} drag-and-drop questions.
+      // Ensure we always have more options than questions (at least 2 extra distractor options)
+      const dragOptionCount = Math.max(questionCount + 2, 5);
+      return basePrompt + `2. Create ${questionCount} drag-and-drop questions with ${dragOptionCount} draggable options.
 
-IMPORTANT UI REQUIREMENTS:
+CRITICAL RULES:
+- You MUST provide EXACTLY ${dragOptionCount} drag_options (more options than questions - some are distractors).
 - Each question MUST include a drop zone indicated by 2+ consecutive underscores (e.g., "____").
 - Use this exact pattern in question_text so the UI can render a drop box:
   "<Item> ____ ." or "Drop answer ____ here." (must contain "____").
@@ -650,7 +653,7 @@ Return ONLY valid JSON in this exact format:
 {
   "dialogue": "Speaker1: Each department has different responsibilities...\\nSpeaker2: I see...",
   "instruction": "Match each person to their responsibility. Drag the correct option to each box.",
-  "drag_options": ["Managing budget", "Training staff", "Customer service", "Quality control", "Marketing"],
+  "drag_options": ["Managing budget", "Training staff", "Customer service", "Quality control", "Marketing", "Scheduling", "Research"],
   "questions": [
     {"question_number": 1, "question_text": "John ____ .", "correct_answer": "Managing budget", "explanation": "John is responsible for budget"},
     {"question_number": 2, "question_text": "Sarah ____ .", "correct_answer": "Training staff", "explanation": "Sarah handles training"}
