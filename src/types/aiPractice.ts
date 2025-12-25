@@ -6,23 +6,33 @@ export type PracticeModule = 'reading' | 'listening' | 'writing' | 'speaking';
 
 export type DifficultyLevel = 'easy' | 'medium' | 'hard';
 
-// Reading question types
+// Reading question types (12 types)
 export type ReadingQuestionType = 
   | 'TRUE_FALSE_NOT_GIVEN'
-  | 'MULTIPLE_CHOICE'
-  | 'FILL_IN_BLANK'
+  | 'YES_NO_NOT_GIVEN'
   | 'MATCHING_HEADINGS'
   | 'MATCHING_INFORMATION'
+  | 'MATCHING_SENTENCE_ENDINGS'
+  | 'MULTIPLE_CHOICE'
+  | 'MULTIPLE_CHOICE_MULTIPLE'
+  | 'FILL_IN_BLANK'
   | 'SENTENCE_COMPLETION'
-  | 'SUMMARY_COMPLETION';
+  | 'TABLE_COMPLETION'
+  | 'FLOWCHART_COMPLETION'
+  | 'MAP_LABELING'
+  | 'SUMMARY_COMPLETION'
+  | 'NOTE_COMPLETION';
 
-// Listening question types  
+// Listening question types (9 types)
 export type ListeningQuestionType =
   | 'FILL_IN_BLANK'
-  | 'MULTIPLE_CHOICE_SINGLE'
-  | 'MULTIPLE_CHOICE_MULTIPLE'
+  | 'TABLE_COMPLETION'
   | 'MATCHING_CORRECT_LETTER'
-  | 'TABLE_COMPLETION';
+  | 'MAP_LABELING'
+  | 'DRAG_AND_DROP_OPTIONS'
+  | 'FLOWCHART_COMPLETION'
+  | 'MULTIPLE_CHOICE_SINGLE'
+  | 'MULTIPLE_CHOICE_MULTIPLE';
 
 // Writing task types
 export type WritingTaskType = 'TASK_1' | 'TASK_2';
@@ -34,17 +44,25 @@ export type QuestionType = ReadingQuestionType | ListeningQuestionType | Writing
 
 // Question counts based on question type
 export const QUESTION_COUNTS: Record<string, number> = {
+  // Reading types
   'TRUE_FALSE_NOT_GIVEN': 5,
-  'MULTIPLE_CHOICE': 4,
-  'FILL_IN_BLANK': 6,
+  'YES_NO_NOT_GIVEN': 5,
   'MATCHING_HEADINGS': 5,
   'MATCHING_INFORMATION': 5,
-  'SENTENCE_COMPLETION': 4,
-  'SUMMARY_COMPLETION': 5,
-  'MULTIPLE_CHOICE_SINGLE': 4,
+  'MATCHING_SENTENCE_ENDINGS': 4,
+  'MULTIPLE_CHOICE': 4,
   'MULTIPLE_CHOICE_MULTIPLE': 3,
-  'MATCHING_CORRECT_LETTER': 5,
+  'FILL_IN_BLANK': 6,
+  'SENTENCE_COMPLETION': 4,
   'TABLE_COMPLETION': 5,
+  'FLOWCHART_COMPLETION': 4,
+  'MAP_LABELING': 5,
+  'SUMMARY_COMPLETION': 5,
+  'NOTE_COMPLETION': 5,
+  // Listening types
+  'MULTIPLE_CHOICE_SINGLE': 4,
+  'MATCHING_CORRECT_LETTER': 5,
+  'DRAG_AND_DROP_OPTIONS': 5,
   // Writing - 1 task
   'TASK_1': 1,
   'TASK_2': 1,

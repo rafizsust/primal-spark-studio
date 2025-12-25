@@ -403,6 +403,64 @@ Return ONLY valid JSON in this exact format:
   ]
 }`;
 
+    case 'MATCHING_SENTENCE_ENDINGS':
+      return basePrompt + `2. Create ${questionCount} matching sentence endings questions.
+   - Provide more endings than questions as distractors
+
+Return ONLY valid JSON in this exact format:
+{
+  "passage": {
+    "title": "The title of the passage",
+    "content": "The full passage text with paragraph labels like [A], [B], etc."
+  },
+  "instruction": "Complete each sentence with the correct ending, A-G, below.",
+  "sentence_beginnings": [
+    {"number": 1, "text": "Scientists discovered that"},
+    {"number": 2, "text": "The research team found that"},
+    {"number": 3, "text": "Experts believe that"}
+  ],
+  "sentence_endings": [
+    {"id": "A", "text": "pollution has increased significantly."},
+    {"id": "B", "text": "new methods are needed."},
+    {"id": "C", "text": "the results were unexpected."},
+    {"id": "D", "text": "further study is required."},
+    {"id": "E", "text": "improvements can be made."}
+  ],
+  "questions": [
+    {"question_number": 1, "question_text": "Scientists discovered that", "correct_answer": "C", "explanation": "The passage states..."},
+    {"question_number": 2, "question_text": "The research team found that", "correct_answer": "A", "explanation": "Found in paragraph B..."}
+  ]
+}`;
+
+    case 'MAP_LABELING':
+      return basePrompt + `2. Create a map/diagram labeling task with ${questionCount} labels to identify.
+   - The passage should describe locations or parts of a place/facility
+   - Generate labels for different areas
+
+Return ONLY valid JSON in this exact format:
+{
+  "passage": {
+    "title": "The title of the passage",
+    "content": "The full passage text describing a location with labeled areas [A], [B], etc."
+  },
+  "instruction": "Label the map below. Choose the correct letter, A-H.",
+  "map_description": "A floor plan of a library showing: reception (A), study rooms (B), computer lab (C), café (D), meeting rooms (E), quiet zone (F), children's section (G), magazine area (H)",
+  "map_labels": [
+    {"id": "A", "text": "Reception"},
+    {"id": "B", "text": "Study Rooms"},
+    {"id": "C", "text": "Computer Lab"},
+    {"id": "D", "text": "Café"},
+    {"id": "E", "text": "Meeting Rooms"},
+    {"id": "F", "text": "Quiet Zone"},
+    {"id": "G", "text": "Children's Section"},
+    {"id": "H", "text": "Magazine Area"}
+  ],
+  "questions": [
+    {"question_number": 1, "question_text": "Where can visitors access the internet?", "correct_answer": "C", "explanation": "The computer lab provides internet access"},
+    {"question_number": 2, "question_text": "Where should visitors go first when entering?", "correct_answer": "A", "explanation": "Reception is the first point of contact"}
+  ]
+}`;
+
     case 'NOTE_COMPLETION':
       return basePrompt + `2. Create a note completion task with ${questionCount} blanks.
 
@@ -593,6 +651,28 @@ Return ONLY valid JSON in this exact format:
   ]
 }`;
 
+    case 'MAP_LABELING':
+      return basePrompt + `2. Create a map labeling task with ${questionCount} locations to identify.
+
+Return ONLY valid JSON in this exact format:
+{
+  "dialogue": "Speaker1: Let me show you around the campus...\\nSpeaker2: Great, where is everything?...",
+  "instruction": "Label the map below. Write the correct letter, A-F.",
+  "map_description": "A campus map showing: Library (A), Science Building (B), Sports Center (C), Cafeteria (D), Administration (E), Parking (F)",
+  "map_labels": [
+    {"id": "A", "text": "Library"},
+    {"id": "B", "text": "Science Building"},
+    {"id": "C", "text": "Sports Center"},
+    {"id": "D", "text": "Cafeteria"},
+    {"id": "E", "text": "Administration"},
+    {"id": "F", "text": "Parking"}
+  ],
+  "questions": [
+    {"question_number": 1, "question_text": "Where can students borrow books?", "correct_answer": "A", "explanation": "The library is mentioned for books"},
+    {"question_number": 2, "question_text": "Where are sports facilities?", "correct_answer": "C", "explanation": "Sports Center has the facilities"}
+  ]
+}`;
+
     default:
       return basePrompt + `2. Create ${questionCount} fill-in-the-blank questions.
 
@@ -700,6 +780,11 @@ serve(async (req) => {
         groupOptions = { headings: parsed.headings };
       } else if (questionType === 'MATCHING_INFORMATION' && parsed.options) {
         groupOptions = { options: parsed.options };
+      } else if (questionType === 'MATCHING_SENTENCE_ENDINGS') {
+        groupOptions = { 
+          sentence_beginnings: parsed.sentence_beginnings,
+          sentence_endings: parsed.sentence_endings 
+        };
       } else if (questionType === 'SUMMARY_WORD_BANK' || questionType === 'SUMMARY_COMPLETION') {
         groupOptions = { 
           word_bank: parsed.word_bank,
@@ -714,6 +799,11 @@ serve(async (req) => {
         groupOptions = { table_data: parsed.table_data };
       } else if (questionType === 'NOTE_COMPLETION') {
         groupOptions = { note_sections: parsed.note_sections };
+      } else if (questionType === 'MAP_LABELING') {
+        groupOptions = { 
+          map_description: parsed.map_description,
+          map_labels: parsed.map_labels 
+        };
       } else if (questionType.includes('MULTIPLE_CHOICE') && parsed.questions?.[0]?.options) {
         groupOptions = { options: parsed.questions[0].options };
       }
@@ -795,6 +885,11 @@ serve(async (req) => {
         };
       } else if (questionType === 'DRAG_AND_DROP_OPTIONS') {
         groupOptions = { drag_options: parsed.drag_options };
+      } else if (questionType === 'MAP_LABELING') {
+        groupOptions = { 
+          map_description: parsed.map_description,
+          map_labels: parsed.map_labels 
+        };
       } else if (questionType.includes('MULTIPLE_CHOICE') && parsed.questions?.[0]?.options) {
         groupOptions = { options: parsed.questions[0].options };
       }
