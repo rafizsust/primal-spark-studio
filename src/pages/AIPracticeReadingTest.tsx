@@ -203,8 +203,13 @@ export default function AIPracticeReadingTest() {
     return roman[num] || String(num);
   };
 
+  // Extract just the paragraph letter from question_text (e.g., "Paragraph A" -> "A")
   const headingParagraphLabels = useMemo(
-    () => matchingHeadingsQuestions.map(q => q.question_text),
+    () => matchingHeadingsQuestions.map(q => {
+      // Try to extract just the letter from "Paragraph A" format
+      const match = q.question_text.match(/(?:Paragraph\s+)?([A-Z])$/i);
+      return match ? match[1].toUpperCase() : q.question_text;
+    }),
     [matchingHeadingsQuestions]
   );
 
