@@ -754,9 +754,9 @@ function getListeningPrompt(
     targetWordCount = Math.round((targetDurationSeconds / 60) * 150);
   }
   
-  // Clamp to safe limits (max 300 words / 120 seconds to stay within Gemini free tier)
-  targetWordCount = Math.min(300, Math.max(100, targetWordCount));
-  targetDurationSeconds = Math.min(120, Math.max(30, targetDurationSeconds));
+  // Clamp to safe limits (max ~1200 words / 480 seconds = 8 minutes at 85% of Gemini capacity)
+  targetWordCount = Math.min(1200, Math.max(100, targetWordCount));
+  targetDurationSeconds = Math.min(480, Math.max(30, targetDurationSeconds));
   
   const wordRange = `${targetWordCount - 30}-${targetWordCount + 30}`;
   
