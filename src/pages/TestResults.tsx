@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { 
   Trophy, 
   RotateCcw, 
@@ -15,7 +16,8 @@ import {
   Medal,
   Loader2,
   Flag,
-  Volume2
+  Volume2,
+  Info
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
@@ -30,6 +32,24 @@ interface QuestionResult {
   explanation?: string;
   options?: any;
   questionType?: string;
+}
+
+/**
+ * Format correct answer string for display
+ * Shows primary answer prominently and alternatives in a friendly way
+ */
+function formatCorrectAnswer(correctAnswer: string): { primary: string; alternatives: string[] } {
+  if (!correctAnswer) return { primary: '', alternatives: [] };
+  
+  const parts = correctAnswer.split('/').map(a => a.trim()).filter(Boolean);
+  
+  if (parts.length === 0) return { primary: '', alternatives: [] };
+  if (parts.length === 1) return { primary: parts[0], alternatives: [] };
+  
+  return {
+    primary: parts[0],
+    alternatives: parts.slice(1)
+  };
 }
 
 interface TopScorer {
@@ -639,10 +659,43 @@ Thank you for looking into this.
                         </p>
                       </div>
                       <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                        <p className="text-xs text-muted-foreground mb-1">Correct Answer</p>
-                        <p className="font-semibold text-emerald-600">
-                          {result.correctAnswer}
-                        </p>
+                        <div className="flex items-center gap-2 mb-1">
+                          <p className="text-xs text-muted-foreground">Correct Answer(s)</p>
+                          {result.correctAnswer.includes('/') && (
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Info size={12} className="text-muted-foreground cursor-help" />
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs">
+                                <p className="text-xs">Multiple answers are accepted. Any of these variations will be marked correct.</p>
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
+                        {(() => {
+                          const { primary, alternatives } = formatCorrectAnswer(result.correctAnswer);
+                          return (
+                            <div>
+                              <p className="font-semibold text-emerald-600">{primary}</p>
+                              {alternatives.length > 0 && (
+                                <div className="mt-1.5 pt-1.5 border-t border-emerald-500/20">
+                                  <p className="text-xs text-muted-foreground mb-1">Also accepted:</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {alternatives.map((alt, idx) => (
+                                      <Badge 
+                                        key={idx} 
+                                        variant="outline" 
+                                        className="text-xs bg-emerald-500/5 border-emerald-500/30 text-emerald-700"
+                                      >
+                                        {alt}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
 
