@@ -301,18 +301,18 @@ export function ParagraphDropZone({
     >
       <span 
         className={cn(
-          "ielts-drop-zone",
+          "ielts-drop-zone block w-full",
           isDragOver && "ielts-drop-zone--active",
-          canClickToPlace && "border-[hsl(var(--ielts-drag-hover))] cursor-pointer hover:bg-[hsl(var(--ielts-input-focus)/0.1)]"
+          canClickToPlace && "border-[hsl(var(--ielts-drag-hover))] cursor-pointer hover:bg-[hsl(var(--ielts-input-focus)/0.15)]"
         )}
         style={{ fontFamily: 'var(--font-ielts)' }}
       >
         {isDragOver ? (
-          <span className="text-[hsl(var(--ielts-input-focus))] text-sm">Drop here</span>
+          <span className="text-[hsl(var(--ielts-input-focus))] text-sm font-medium">Drop heading here</span>
         ) : canClickToPlace ? (
-          <span className="text-[hsl(var(--ielts-input-focus))] text-sm">Click to place</span>
+          <span className="text-[hsl(var(--ielts-input-focus))] text-sm font-medium">Click to place heading</span>
         ) : (
-          <span className="text-muted-foreground/60 select-none text-sm">{questionNumber ?? '?'}</span>
+          <span className="text-muted-foreground/60 select-none text-sm">Question {questionNumber ?? '?'} - Drop heading here</span>
         )}
       </span>
     </div>

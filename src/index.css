@@ -423,12 +423,13 @@
     cursor: grabbing;
   }
 
-  /* IELTS Drop Zone */
+  /* IELTS Drop Zone - Larger to match official IELTS sizing */
   .ielts-drop-zone {
-    min-width: 120px;
-    min-height: 28px;
-    border: 1px dashed hsl(var(--ielts-drag-border));
-    background-color: transparent;
+    min-width: 280px;
+    min-height: 40px;
+    padding: 8px 16px;
+    border: 2px dashed hsl(var(--ielts-drag-border));
+    background-color: hsl(var(--ielts-input-bg) / 0.5);
     border-radius: 6px;
     display: inline-flex;
     align-items: center;
@@ -439,7 +440,8 @@
   .ielts-drop-zone--active {
     border-color: hsl(var(--ielts-drag-hover));
     border-style: solid;
-    background-color: hsl(var(--ielts-input-focus) / 0.1);
+    border-width: 2px;
+    background-color: hsl(var(--ielts-input-focus) / 0.15);
   }
 
   .ielts-drop-zone--filled {

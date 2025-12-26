@@ -263,10 +263,10 @@ export default function AIPracticeResults() {
   const percentage = Math.round((result.score / result.totalQuestions) * 100);
 
   return (
-    <div className="min-h-screen flex flex-col bg-background">
+    <div className="min-h-screen flex flex-col bg-background overflow-y-auto">
       <Navbar />
       
-      <main className="flex-1 py-8">
+      <main className="flex-1 py-8 overflow-visible">
         <div className="container max-w-4xl mx-auto px-4">
           {/* Header */}
           <div className="text-center mb-8">
@@ -488,7 +488,7 @@ export default function AIPracticeResults() {
                                 
                                 {/* Chat Messages */}
                                 {chatState.messages.length > 0 && (
-                                  <ScrollArea className="max-h-[350px] pr-2">
+                                  <ScrollArea className="max-h-[500px] pr-2">
                                     <div className="space-y-3">
                                       {chatState.messages.map((msg) => (
                                         <div

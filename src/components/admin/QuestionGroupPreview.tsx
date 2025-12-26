@@ -10,7 +10,7 @@ import { MultipleChoice } from '@/components/reading/questions/MultipleChoice';
 import { FillInBlank } from '@/components/reading/questions/FillInBlank';
 import { MatchingFeatures } from '@/components/reading/questions/MatchingFeatures';
 import { TableSelection } from '@/components/reading/questions/TableSelection';
-import { MatchingInformationGrid } from '@/components/reading/questions/MatchingInformationGrid';
+import { MatchingInformation } from '@/components/reading/questions/MatchingInformation';
 import { ReadingTableCompletion } from '@/components/reading/questions/ReadingTableCompletion';
 import { MultipleChoiceMultiple } from '@/components/reading/questions/MultipleChoiceMultiple';
 import { NoteStyleFillInBlank } from '@/components/listening/questions/NoteStyleFillInBlank';
@@ -512,16 +512,46 @@ export function QuestionGroupPreview({ group, paragraphLabels = [] }: QuestionGr
         );
       }
 
+      // Get options - handle both array format and object format with letter/text
+      const rawOptions: unknown[] = group.options || [];
+      let matchingOptions: Array<{letter: string; text: string}> = [];
+      
+      if (Array.isArray(rawOptions) && rawOptions.length > 0) {
+        const firstOpt = rawOptions[0];
+        // Check if options have letter/text format already
+        if (typeof firstOpt === 'object' && firstOpt !== null && 'letter' in firstOpt) {
+          matchingOptions = rawOptions as Array<{letter: string; text: string}>;
+        } else {
+          // Simple string array - convert to letter/text format
+          matchingOptions = rawOptions.map((opt, idx) => ({
+            letter: String.fromCharCode(65 + idx),
+            text: String(opt)
+          }));
+        }
+      } else if (paragraphLabels.length > 0) {
+        // Fall back to paragraph labels
+        matchingOptions = paragraphLabels.map((label, idx) => ({
+          letter: String.fromCharCode(65 + idx),
+          text: `Paragraph ${label}`
+        }));
+      }
+
+      // Transform questions to MatchingInformationQuestion format
+      const matchingQuestions = previewQuestions.map(q => ({
+        question_number: q.question_number,
+        statement_before: q.question_text,
+      }));
+
       return (
-        <MatchingInformationGrid
-          questions={previewQuestions}
+        <MatchingInformation
+          questions={matchingQuestions}
+          options={matchingOptions}
+          optionsTitle={group.options_title || 'List of Paragraphs'}
           answers={previewAnswers}
           onAnswerChange={handleAnswerChange}
-          paragraphLabels={paragraphLabels}
           currentQuestion={currentQuestion}
-          setCurrentQuestion={setCurrentQuestion}
-          useLetterHeadings={group.use_letter_headings}
-          optionsTitle={group.options_title || 'List of Options'}
+          onSetActive={setCurrentQuestion}
+          fontSize={14}
         />
       );
     }

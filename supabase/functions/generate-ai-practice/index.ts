@@ -507,6 +507,9 @@ Return ONLY valid JSON in this exact format:
 
     case 'MATCHING_INFORMATION':
       return basePrompt + `2. Create ${questionCount} matching information questions where test-takers match statements to paragraphs.
+   - The passage has multiple paragraphs labeled A, B, C, D, E
+   - Each question asks which paragraph contains specific information
+   - Provide paragraph options with descriptions (not just letters)
 
 Return ONLY valid JSON in this exact format:
 {
@@ -515,13 +518,19 @@ Return ONLY valid JSON in this exact format:
     "content": "The full passage text with paragraph labels like [A], [B], [C], [D], [E]"
   },
   "instruction": "Which paragraph contains the following information? Write the correct letter, A-E.",
-  "options": ["A", "B", "C", "D", "E"],
+  "options": [
+    {"letter": "A", "text": "Introduction and background"},
+    {"letter": "B", "text": "Historical development"},
+    {"letter": "C", "text": "Current applications"},
+    {"letter": "D", "text": "Future implications"},
+    {"letter": "E", "text": "Conclusion and summary"}
+  ],
   "questions": [
     {
       "question_number": 1,
-      "question_text": "A description of...",
-      "correct_answer": "C",
-      "explanation": "This information is found in paragraph C where..."
+      "question_text": "A description of the early origins of the subject",
+      "correct_answer": "B",
+      "explanation": "This information is found in paragraph B where the historical development is discussed..."
     }
   ]
 }`;
