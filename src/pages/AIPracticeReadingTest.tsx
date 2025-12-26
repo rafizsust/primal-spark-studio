@@ -6,6 +6,7 @@ import { ReadingQuestions } from '@/components/reading/ReadingQuestions';
 import { ReadingTimer } from '@/components/reading/ReadingTimer';
 import { ReadingNavigation } from '@/components/reading/ReadingNavigation';
 import { TestOptionsMenu, ContrastMode, TextSizeMode } from '@/components/reading/TestOptionsMenu';
+import { TestStartOverlay } from '@/components/common/TestStartOverlay';
 import { StickyNote, ArrowLeft, ArrowRight, Sparkles } from 'lucide-react';
 import {
   ResizableHandle,
@@ -79,7 +80,8 @@ export default function AIPracticeReadingTest() {
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
-  const [testStarted] = useState(true);
+  const [testStarted, setTestStarted] = useState(false);
+  const [showStartOverlay, setShowStartOverlay] = useState(true);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [isNoteSidebarOpen, setIsNoteSidebarOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'passage' | 'questions'>('passage');
@@ -461,6 +463,13 @@ export default function AIPracticeReadingTest() {
     };
   }, [contrastMode, textSizeMode]);
 
+  // Handle test start from overlay
+  const handleStartTest = useCallback(() => {
+    setShowStartOverlay(false);
+    setTestStarted(true);
+    startTimeRef.current = Date.now();
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-secondary flex items-center justify-center">
@@ -474,6 +483,22 @@ export default function AIPracticeReadingTest() {
       <div className="min-h-screen bg-secondary flex items-center justify-center">
         <div className="text-destructive">Test not found</div>
       </div>
+    );
+  }
+
+  // Show start overlay before test begins
+  if (showStartOverlay) {
+    return (
+      <TestStartOverlay
+        module="reading"
+        testTitle={`AI Practice: ${test.questionType?.replace(/_/g, ' ') || 'Reading Test'}`}
+        timeMinutes={test.timeMinutes}
+        totalQuestions={test.totalQuestions}
+        questionType={test.questionType || 'Reading'}
+        difficulty={test.difficulty}
+        onStart={handleStartTest}
+        onCancel={() => navigate('/ai-practice')}
+      />
     );
   }
 

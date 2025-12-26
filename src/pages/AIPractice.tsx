@@ -15,6 +15,7 @@ import { AILoadingScreen } from '@/components/common/AILoadingScreen';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { playCompletionSound, playErrorSound } from '@/lib/sounds';
 import { 
   BookOpen, 
   Headphones, 
@@ -257,6 +258,9 @@ export default function AIPractice() {
       setCurrentTest(generatedTest);
       await saveGeneratedTestAsync(generatedTest, user.id);
 
+      // Play completion sound
+      playCompletionSound();
+
       toast({
         title: 'Test Generated!',
         description: `Your ${activeModule} practice test is ready`,
@@ -278,6 +282,7 @@ export default function AIPractice() {
     } catch (err: any) {
       console.error('Generation error:', err);
       clearInterval(stepInterval);
+      playErrorSound();
       toast({
         title: 'Generation Failed',
         description: err.message || 'Failed to generate practice test. Please try again.',

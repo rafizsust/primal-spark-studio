@@ -7,6 +7,7 @@ import {
   ListeningTimer,
 } from '@/components/listening';
 import { TestOptionsMenu, ContrastMode, TextSizeMode } from '@/components/reading/TestOptionsMenu';
+import { TestStartOverlay } from '@/components/common/TestStartOverlay';
 import { StickyNote, ArrowLeft, ArrowRight, Sparkles, Volume2, Play, Pause, AlertCircle } from 'lucide-react';
 import {
   ResizablePanel,
@@ -118,7 +119,8 @@ export default function AIPracticeListeningTest() {
   const [activePartIndex, setActivePartIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [timeLeft, setTimeLeft] = useState(0);
-  const [testStarted] = useState(true);
+  const [testStarted, setTestStarted] = useState(false);
+  const [showStartOverlay, setShowStartOverlay] = useState(true);
   const [showSubmitDialog, setShowSubmitDialog] = useState(false);
   const [isNoteSidebarOpen, setIsNoteSidebarOpen] = useState(false);
   const [mobileView, setMobileView] = useState<'questions' | 'audio'>('questions');
@@ -424,6 +426,13 @@ export default function AIPracticeListeningTest() {
     };
   }, [contrastMode, textSizeMode]);
 
+  // Handle test start from overlay
+  const handleStartTest = useCallback(() => {
+    setShowStartOverlay(false);
+    setTestStarted(true);
+    startTimeRef.current = Date.now();
+  }, []);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-secondary flex items-center justify-center">
@@ -437,6 +446,22 @@ export default function AIPracticeListeningTest() {
       <div className="min-h-screen bg-secondary flex items-center justify-center">
         <div className="text-destructive">Listening test not found</div>
       </div>
+    );
+  }
+
+  // Show start overlay before test begins
+  if (showStartOverlay) {
+    return (
+      <TestStartOverlay
+        module="listening"
+        testTitle={`AI Practice: ${test.questionType?.replace(/_/g, ' ') || 'Listening Test'}`}
+        timeMinutes={test.timeMinutes}
+        totalQuestions={test.totalQuestions}
+        questionType={test.questionType || 'Listening'}
+        difficulty={test.difficulty}
+        onStart={handleStartTest}
+        onCancel={() => navigate('/ai-practice')}
+      />
     );
   }
 
