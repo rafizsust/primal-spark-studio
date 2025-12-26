@@ -802,12 +802,15 @@ Return ONLY valid JSON in this exact format:
    - Each question asks which labeled area (A, B, C, etc.) matches a description
    - IMPORTANT: The passage MUST clearly state which label corresponds to which location
    - Make sure answers are definitively correct based on the passage content
+   - CRITICAL: DO NOT make answers sequential (e.g., Q1=A, Q2=B, Q3=C is WRONG)
+   - RANDOMIZE the correct answers across questions (e.g., Q1=D, Q2=A, Q3=F, Q4=B)
+   - Questions should ask about locations in a non-sequential order relative to their labels
 
 Return ONLY valid JSON in this exact format:
 {
   "passage": {
     "title": "The title of the passage",
-    "content": "The full passage text describing a location. Example: 'The reception area, labeled A on the map, is the first stop for visitors. The computer lab, marked as C, provides internet access. Study rooms are designated as B and offer quiet spaces.'"
+    "content": "The full passage text describing a location. Example: 'The reception area, labeled A on the map, is the first stop for visitors. The computer lab, marked as C, provides internet access. Study rooms are designated as B and offer quiet spaces. The café, marked D, serves refreshments.'"
   },
   "instruction": "Label the map below. Choose the correct letter, A-H.",
   "map_description": "A floor plan of a library showing: reception (A), study rooms (B), computer lab (C), café (D), meeting rooms (E), quiet zone (F), children's section (G), magazine area (H)",
@@ -823,7 +826,9 @@ Return ONLY valid JSON in this exact format:
   ],
   "questions": [
     {"question_number": 1, "question_text": "Where can visitors access the internet?", "correct_answer": "C", "explanation": "The passage states 'The computer lab, marked as C, provides internet access.'"},
-    {"question_number": 2, "question_text": "Where should visitors go first when entering?", "correct_answer": "A", "explanation": "The passage states 'The reception area, labeled A on the map, is the first stop for visitors.'"}
+    {"question_number": 2, "question_text": "Where should visitors go first when entering?", "correct_answer": "A", "explanation": "The passage states 'The reception area, labeled A on the map, is the first stop for visitors.'"},
+    {"question_number": 3, "question_text": "Where can visitors get food or drinks?", "correct_answer": "D", "explanation": "The passage states 'The café, marked D, serves refreshments.'"},
+    {"question_number": 4, "question_text": "Where are the quiet study spaces located?", "correct_answer": "B", "explanation": "The passage states 'Study rooms are designated as B and offer quiet spaces.'"}
   ]
 }`;
 
