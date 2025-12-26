@@ -6,6 +6,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { 
   BookOpen, 
   Headphones, 
+  PenTool,
+  Mic,
   Clock, 
   Target, 
   AlertCircle,
@@ -15,12 +17,13 @@ import {
 import { cn } from '@/lib/utils';
 
 interface TestStartOverlayProps {
-  module: 'reading' | 'listening';
+  module: 'reading' | 'listening' | 'writing' | 'speaking';
   testTitle?: string;
   timeMinutes: number;
   totalQuestions: number;
   questionType: string;
   difficulty: string;
+  wordLimit?: number;
   onStart: () => void;
   onCancel: () => void;
 }
@@ -32,13 +35,17 @@ export function TestStartOverlay({
   totalQuestions,
   questionType,
   difficulty,
+  wordLimit,
   onStart,
   onCancel,
 }: TestStartOverlayProps) {
   const [hasAgreed, setHasAgreed] = useState(false);
-  const [hasTestedAudio, setHasTestedAudio] = useState(module !== 'listening');
+  const [hasTestedAudio, setHasTestedAudio] = useState(module !== 'listening' && module !== 'speaking');
+  const [hasTestedMic, setHasTestedMic] = useState(module !== 'speaking');
 
-  const isReady = hasAgreed && (module !== 'listening' || hasTestedAudio);
+  const needsAudioTest = module === 'listening' || module === 'speaking';
+  const needsMicTest = module === 'speaking';
+  const isReady = hasAgreed && (!needsAudioTest || hasTestedAudio) && (!needsMicTest || hasTestedMic);
 
   const testAudio = () => {
     try {
@@ -68,7 +75,27 @@ export function TestStartOverlay({
     }
   };
 
-  const ModuleIcon = module === 'reading' ? BookOpen : Headphones;
+  const testMicrophone = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      setHasTestedMic(true);
+    } catch (error) {
+      console.warn('Microphone test failed:', error);
+      setHasTestedMic(true); // Allow to proceed but warn
+    }
+  };
+
+  const ModuleIcon = 
+    module === 'reading' ? BookOpen : 
+    module === 'listening' ? Headphones :
+    module === 'writing' ? PenTool : Mic;
+
+  const moduleLabel = 
+    module === 'reading' ? 'Reading' :
+    module === 'listening' ? 'Listening' :
+    module === 'writing' ? 'Writing' : 'Speaking';
+
   const difficultyColor = 
     difficulty === 'easy' ? 'bg-success/20 text-success border-success/30' :
     difficulty === 'medium' ? 'bg-warning/20 text-warning border-warning/30' :
@@ -76,13 +103,13 @@ export function TestStartOverlay({
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background/95 backdrop-blur-sm animate-fade-in">
-      <Card className="max-w-lg w-full mx-4 shadow-2xl border-primary/20">
+      <Card className="max-w-lg w-full mx-4 shadow-2xl border-primary/20 max-h-[90vh] overflow-y-auto">
         <CardHeader className="text-center pb-4">
           <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-primary/10 flex items-center justify-center">
             <ModuleIcon className="w-8 h-8 text-primary" />
           </div>
           <CardTitle className="text-2xl">
-            Ready to Start Your {module === 'reading' ? 'Reading' : 'Listening'} Test?
+            Ready to Start Your {moduleLabel} Test?
           </CardTitle>
           <CardDescription className="text-base">
             {testTitle || 'AI-Generated Practice Test'}
@@ -91,31 +118,47 @@ export function TestStartOverlay({
         
         <CardContent className="space-y-6">
           {/* Test Info */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className={cn("grid gap-3", module === 'writing' ? "grid-cols-2" : "grid-cols-3")}>
             <div className="text-center p-3 rounded-lg bg-muted/50">
               <Clock className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
               <div className="text-lg font-bold">{timeMinutes} min</div>
               <div className="text-xs text-muted-foreground">Time Limit</div>
             </div>
-            <div className="text-center p-3 rounded-lg bg-muted/50">
-              <Target className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
-              <div className="text-lg font-bold">{totalQuestions}</div>
-              <div className="text-xs text-muted-foreground">Questions</div>
-            </div>
-            <div className="text-center p-3 rounded-lg bg-muted/50">
-              <Badge variant="outline" className={cn("text-xs", difficultyColor)}>
-                {difficulty}
-              </Badge>
-              <div className="text-xs text-muted-foreground mt-1">Difficulty</div>
-            </div>
+            {module === 'writing' ? (
+              <div className="text-center p-3 rounded-lg bg-muted/50">
+                <Target className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
+                <div className="text-lg font-bold">{wordLimit || 250}+</div>
+                <div className="text-xs text-muted-foreground">Words Required</div>
+              </div>
+            ) : (
+              <>
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <Target className="w-5 h-5 mx-auto mb-1 text-muted-foreground" />
+                  <div className="text-lg font-bold">{totalQuestions}</div>
+                  <div className="text-xs text-muted-foreground">{module === 'speaking' ? 'Parts' : 'Questions'}</div>
+                </div>
+                <div className="text-center p-3 rounded-lg bg-muted/50">
+                  <Badge variant="outline" className={cn("text-xs", difficultyColor)}>
+                    {difficulty}
+                  </Badge>
+                  <div className="text-xs text-muted-foreground mt-1">Difficulty</div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="text-sm text-center text-muted-foreground">
-            Question Type: <span className="font-medium text-foreground">{questionType.replace(/_/g, ' ')}</span>
+            {module === 'writing' ? (
+              <>Task Type: <span className="font-medium text-foreground">{questionType.replace(/_/g, ' ')}</span></>
+            ) : module === 'speaking' ? (
+              <>Test Format: <span className="font-medium text-foreground">{questionType.replace(/_/g, ' ')}</span></>
+            ) : (
+              <>Question Type: <span className="font-medium text-foreground">{questionType.replace(/_/g, ' ')}</span></>
+            )}
           </div>
 
-          {/* Audio Test for Listening */}
-          {module === 'listening' && (
+          {/* Audio Test for Listening/Speaking */}
+          {needsAudioTest && (
             <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -136,6 +179,28 @@ export function TestStartOverlay({
             </div>
           )}
 
+          {/* Microphone Test for Speaking */}
+          {needsMicTest && (
+            <div className="p-4 rounded-lg bg-primary/5 border border-primary/20">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mic className="w-5 h-5 text-primary" />
+                  <span className="text-sm font-medium">Test Your Microphone</span>
+                </div>
+                <Button 
+                  size="sm" 
+                  variant={hasTestedMic ? "secondary" : "default"}
+                  onClick={testMicrophone}
+                >
+                  {hasTestedMic ? '✓ Mic Works' : 'Test Microphone'}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Your browser will ask for microphone permission.
+              </p>
+            </div>
+          )}
+
           {/* Important Notice */}
           <div className="p-4 rounded-lg bg-warning/5 border border-warning/20">
             <div className="flex gap-3">
@@ -144,10 +209,16 @@ export function TestStartOverlay({
                 <p className="font-medium text-foreground mb-1">Before you begin:</p>
                 <ul className="text-muted-foreground space-y-1 list-disc list-inside">
                   <li>Timer will start immediately when you click Start</li>
-                  <li>You cannot pause the test once started</li>
+                  {module !== 'speaking' && <li>You cannot pause the test once started</li>}
                   <li>Make sure you're in a quiet environment</li>
                   {module === 'listening' && (
                     <li>Audio will play automatically - listen carefully</li>
+                  )}
+                  {module === 'writing' && (
+                    <li>Write at least {wordLimit || 250} words to submit</li>
+                  )}
+                  {module === 'speaking' && (
+                    <li>Speak clearly into your microphone when prompted</li>
                   )}
                 </ul>
               </div>

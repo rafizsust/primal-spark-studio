@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { loadGeneratedTest, savePracticeResult, GeneratedTest, PracticeResult } from '@/types/aiPractice';
 import { useToast } from '@/hooks/use-toast';
+import { TestStartOverlay } from '@/components/common/TestStartOverlay';
 import { Clock, Mic, MicOff, ArrowRight, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +21,7 @@ export default function AIPracticeSpeakingTest() {
   const [isRecording, setIsRecording] = useState(false);
   const [, setRecordings] = useState<Record<string, Blob>>({});
   const [timeLeft, setTimeLeft] = useState(0);
+  const [showStartOverlay, setShowStartOverlay] = useState(true);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -159,7 +161,29 @@ export default function AIPracticeSpeakingTest() {
 
   const formatTime = (s: number) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
 
+  // Handle test start from overlay
+  const handleStartTest = useCallback(() => {
+    setShowStartOverlay(false);
+    startTimeRef.current = Date.now();
+  }, []);
+
   if (!test?.speakingParts?.length) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
+
+  // Show start overlay before test begins
+  if (showStartOverlay) {
+    return (
+      <TestStartOverlay
+        module="speaking"
+        testTitle={`AI Practice: Speaking Test`}
+        timeMinutes={test.speakingParts.reduce((acc, p) => acc + (p.time_limit_seconds || 120) / 60, 0)}
+        totalQuestions={test.speakingParts.length}
+        questionType={test.questionType || 'FULL TEST'}
+        difficulty={test.difficulty}
+        onStart={handleStartTest}
+        onCancel={() => navigate('/ai-practice')}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,6 +8,7 @@ import { loadGeneratedTest, savePracticeResult, GeneratedTest, PracticeResult } 
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { AILoadingScreen } from '@/components/common/AILoadingScreen';
+import { TestStartOverlay } from '@/components/common/TestStartOverlay';
 import { Clock, Send, PenTool } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -21,6 +22,8 @@ export default function AIPracticeWritingTest() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [testStarted, setTestStarted] = useState(false);
+  const [showStartOverlay, setShowStartOverlay] = useState(true);
   const startTimeRef = useRef<number>(Date.now());
 
   const wordCount = submissionText.trim().split(/\s+/).filter(Boolean).length;
@@ -39,7 +42,7 @@ export default function AIPracticeWritingTest() {
   }, [testId, navigate, toast]);
 
   useEffect(() => {
-    if (isPaused || !test) return;
+    if (isPaused || !test || !testStarted) return;
     const timer = setInterval(() => {
       setTimeLeft(prev => {
         if (prev <= 1) { clearInterval(timer); handleSubmit(); return 0; }
@@ -47,7 +50,7 @@ export default function AIPracticeWritingTest() {
       });
     }, 1000);
     return () => clearInterval(timer);
-  }, [isPaused, test]);
+  }, [isPaused, test, testStarted]);
 
   const handleSubmit = async () => {
     if (!test?.writingTask || wordCount < 50) {
@@ -114,6 +117,13 @@ export default function AIPracticeWritingTest() {
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Handle test start from overlay
+  const handleStartTest = useCallback(() => {
+    setShowStartOverlay(false);
+    setTestStarted(true);
+    startTimeRef.current = Date.now();
+  }, []);
+
   if (isSubmitting) {
     return <AILoadingScreen title="Evaluating Your Writing" description="AI is analyzing your response..." progressSteps={['Reading submission', 'Analyzing content', 'Scoring criteria', 'Generating feedback']} currentStepIndex={0} />;
   }
@@ -121,6 +131,23 @@ export default function AIPracticeWritingTest() {
   if (!test?.writingTask) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" /></div>;
 
   const task = test.writingTask;
+
+  // Show start overlay before test begins
+  if (showStartOverlay) {
+    return (
+      <TestStartOverlay
+        module="writing"
+        testTitle={`AI Practice: ${task.task_type === 'task1' ? 'Task 1 (Report)' : 'Task 2 (Essay)'}`}
+        timeMinutes={test.timeMinutes}
+        totalQuestions={1}
+        questionType={task.task_type === 'task1' ? 'TASK 1' : 'TASK 2'}
+        difficulty={test.difficulty}
+        wordLimit={task.word_limit_min}
+        onStart={handleStartTest}
+        onCancel={() => navigate('/ai-practice')}
+      />
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
