@@ -355,6 +355,16 @@ interface ReadingConfig {
   useWordCountMode?: boolean;
 }
 
+// Listening configuration interface
+// Gemini free tier limits: ~15 min audio/day, keep each request to max ~2 min (70% of capacity)
+// ~150 words per minute of speech at normal pace
+interface ListeningConfig {
+  transcriptPreset?: string;
+  durationSeconds?: number;
+  wordCount?: number;
+  useWordCountMode?: boolean;
+}
+
 // Reading question type prompts - generate structured data matching DB schema
 function getReadingPrompt(
   questionType: string, 
@@ -719,8 +729,36 @@ Return ONLY valid JSON in this exact format:
 }
 
 // Listening question type prompts
-function getListeningPrompt(questionType: string, topic: string, difficulty: string, questionCount: number, scenario: any): string {
+function getListeningPrompt(
+  questionType: string, 
+  topic: string, 
+  difficulty: string, 
+  questionCount: number, 
+  scenario: any,
+  listeningConfig?: ListeningConfig
+): string {
   const difficultyDesc = difficulty === 'easy' ? 'Band 5-6' : difficulty === 'medium' ? 'Band 6-7' : 'Band 7-8';
+  
+  // Determine transcript specifications based on config
+  // Default: ~225 words (~90 seconds of audio)
+  let targetWordCount = listeningConfig?.wordCount || 225;
+  let targetDurationSeconds = listeningConfig?.durationSeconds || 90;
+  
+  // If using word count mode, estimate duration (150 words/minute)
+  if (listeningConfig?.useWordCountMode && listeningConfig.wordCount) {
+    targetWordCount = listeningConfig.wordCount;
+    targetDurationSeconds = Math.round((targetWordCount / 150) * 60);
+  } else if (!listeningConfig?.useWordCountMode && listeningConfig?.durationSeconds) {
+    // If using duration mode, estimate word count
+    targetDurationSeconds = listeningConfig.durationSeconds;
+    targetWordCount = Math.round((targetDurationSeconds / 60) * 150);
+  }
+  
+  // Clamp to safe limits (max 300 words / 120 seconds to stay within Gemini free tier)
+  targetWordCount = Math.min(300, Math.max(100, targetWordCount));
+  targetDurationSeconds = Math.min(120, Math.max(30, targetDurationSeconds));
+  
+  const wordRange = `${targetWordCount - 30}-${targetWordCount + 30}`;
   
   const basePrompt = `Generate an IELTS Listening test section with the following specifications:
 
@@ -730,7 +768,7 @@ Difficulty: ${difficulty} (${difficultyDesc})
 
 Requirements:
 1. Create a dialogue script between Speaker1 and Speaker2 that is:
-   - 200-350 words total
+   - ${wordRange} words total (approximately ${targetDurationSeconds} seconds when spoken)
    - Natural and conversational
    - Contains specific details (names, numbers, dates, locations)
    - Format each line as: "Speaker1: dialogue text" or "Speaker2: dialogue text"
@@ -987,7 +1025,7 @@ serve(async (req) => {
     const geminiApiKey = await decryptApiKey(secretData.encrypted_value, appEncryptionKey);
 
     // Parse request
-    const { module, questionType, difficulty, topicPreference, questionCount, timeMinutes, readingConfig } = await req.json();
+    const { module, questionType, difficulty, topicPreference, questionCount, timeMinutes, readingConfig, listeningConfig } = await req.json();
     
     const topic = topicPreference || IELTS_TOPICS[Math.floor(Math.random() * IELTS_TOPICS.length)];
     const testId = crypto.randomUUID();
@@ -995,6 +1033,9 @@ serve(async (req) => {
     console.log(`Generating ${module} test: ${questionType}, ${difficulty}, topic: ${topic}, questions: ${questionCount}`);
     if (readingConfig) {
       console.log(`Reading config: paragraphs=${readingConfig.paragraphCount}, words=${readingConfig.wordCount}, preset=${readingConfig.passagePreset}`);
+    }
+    if (listeningConfig) {
+      console.log(`Listening config: duration=${listeningConfig.durationSeconds}s, words=${listeningConfig.wordCount}, preset=${listeningConfig.transcriptPreset}`);
     }
 
     if (module === 'reading') {
@@ -1127,7 +1168,7 @@ serve(async (req) => {
     } else if (module === 'listening') {
       // Generate Listening Test
       const scenario = LISTENING_SCENARIOS[Math.floor(Math.random() * LISTENING_SCENARIOS.length)];
-      const listeningPrompt = getListeningPrompt(questionType, topic, difficulty, questionCount, scenario);
+      const listeningPrompt = getListeningPrompt(questionType, topic, difficulty, questionCount, scenario, listeningConfig);
 
       const result = await callGemini(geminiApiKey, listeningPrompt);
       if (!result) {
