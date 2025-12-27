@@ -506,7 +506,18 @@ Return ONLY valid JSON in this exact format:
 }`;
 
     case 'MULTIPLE_CHOICE_MULTIPLE':
-      return basePrompt + `2. Create ${questionCount} multiple choice questions where test-takers must select TWO correct answers.
+      // For MCQ Multiple, we create ONE question that requires selecting multiple answers
+      // questionCount here represents the number of answers to select (e.g., 2 or 3)
+      const numAnswersToSelect = Math.min(questionCount, 3); // Cap at 3 to keep it reasonable
+      const answerWord = numAnswersToSelect === 2 ? 'TWO' : numAnswersToSelect === 3 ? 'THREE' : String(numAnswersToSelect);
+      
+      return basePrompt + `2. Create ONE multiple choice question where test-takers must select ${answerWord} correct answers from the options.
+
+IMPORTANT:
+- Generate exactly ONE question with ${numAnswersToSelect} correct options
+- The correct_answer must be a comma-separated list of ${numAnswersToSelect} letters (e.g., "B,D" or "A,C,E")
+- DO NOT always use the same letters - randomize which options are correct
+- Provide 5-6 options total so there are distractors
 
 Return ONLY valid JSON in this exact format:
 {
@@ -514,15 +525,15 @@ Return ONLY valid JSON in this exact format:
     "title": "The title of the passage",
     "content": "The full passage text with paragraph labels like [A], [B], etc."
   },
-  "instruction": "Choose TWO letters, A-E.",
+  "instruction": "Choose ${answerWord} letters, A-E.",
   "questions": [
     {
       "question_number": 1,
-      "question_text": "Which TWO statements are true according to the passage?",
+      "question_text": "Which ${answerWord} of the following statements are supported by information in the passage?",
       "options": ["A First option", "B Second option", "C Third option", "D Fourth option", "E Fifth option"],
-      "correct_answer": "A,C",
-      "explanation": "Why A and C are correct",
-      "max_answers": 2
+      "correct_answer": "B,D",
+      "explanation": "B is correct because... D is correct because...",
+      "max_answers": ${numAnswersToSelect}
     }
   ]
 }`;

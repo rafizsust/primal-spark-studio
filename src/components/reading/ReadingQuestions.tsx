@@ -1161,7 +1161,8 @@ export function ReadingQuestions({
                                 >
                                   <div className="flex items-start gap-2">
                                     {/* Question number badge - only show for non-fill-in-blank types, or when no inline blank */}
-                                    {!hasInlineBlank && (
+                                    {/* For fill-in-blank types, the input placeholder already shows the number */}
+                                    {!hasInlineBlank && !isFillInGapGroup && (
                                       <span className={cn(
                                         "flex-shrink-0 text-base font-bold text-foreground inline-flex items-center justify-center",
                                         isActive 

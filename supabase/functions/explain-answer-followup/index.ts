@@ -161,20 +161,24 @@ CRITICAL RULES:
 
 ${moduleContext}
 
+## QUESTION AND ANSWER DETAILS
+
 QUESTION ${context.questionNumber || ''}: ${context.questionText || ''}
 ${context.options ? `Options: ${JSON.stringify(context.options)}` : ''}
 
-Your answer: ${context.userAnswer || '(No answer)'}
-Correct answer: ${context.correctAnswer || ''}
-Result: ${context.isCorrect ? 'Correct ✓' : 'Incorrect ✗'}
+**STUDENT'S ANSWER**: "${context.userAnswer || '(No answer provided)'}"
+**CORRECT ANSWER**: "${context.correctAnswer || ''}"
+**RESULT**: ${context.isCorrect ? 'CORRECT ✓' : 'INCORRECT ✗'}
 
-${context.explanation ? `Previous explanation: ${context.explanation}` : ''}
+${context.explanation ? `Initial explanation: ${context.explanation}` : ''}
+
+---
+
+STUDENT'S FOLLOW-UP MESSAGE: ${question}
 
 ---
 
-STUDENT'S MESSAGE: ${question}
-
----
+IMPORTANT: You have access to the student's answer above ("${context.userAnswer || '(No answer)'}"). When they ask "what was my answer?" or similar, tell them directly. Do not claim you cannot see their answer - you can.
 
 First, evaluate if the student's message is meaningful and related to the question/passage:
 - If it's random characters, gibberish, or nonsensical, politely ask them to clarify what they want to know

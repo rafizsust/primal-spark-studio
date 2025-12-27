@@ -60,19 +60,7 @@ export function FlowchartCompletion({
                     : "border-border bg-card hover:border-muted-foreground/50"
                 )}
               >
-                {/* Question number badge */}
-                {step.questionNumber && (
-                  <span className={cn(
-                    "absolute -top-2 -left-2 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : answer
-                        ? "bg-green-500 text-white"
-                        : "bg-muted text-muted-foreground"
-                  )}>
-                    {step.questionNumber}
-                  </span>
-                )}
+                {/* Question number badge removed - the input placeholder shows the number */}
 
                 {/* Content */}
                 {step.isBlank && step.questionNumber ? (
