@@ -32,7 +32,7 @@ interface MatchingInformationProps {
 export function MatchingInformation({
   questions,
   options,
-  optionsTitle = 'List of Paragraphs',
+  optionsTitle = 'List of Information',
   answers,
   onAnswerChange,
   currentQuestion,

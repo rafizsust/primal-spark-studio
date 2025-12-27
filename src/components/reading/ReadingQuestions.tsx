@@ -5,7 +5,7 @@ import {
   MultipleChoiceMultiple,
   FillInBlank,
   TableCompletion,
-  
+  SentenceCompletion,
   FlowchartCompletion,
   MapLabeling,
   NoteCompletion,
@@ -235,7 +235,19 @@ export function ReadingQuestions({
         // Handled at group level - return null for individual rendering
         return null;
       
-      case 'SENTENCE_COMPLETION':
+      case 'SENTENCE_COMPLETION': {
+        // Use dedicated SentenceCompletion component that properly handles _____ patterns
+        return (
+          <SentenceCompletion
+            question={question}
+            answer={answer}
+            onAnswerChange={handleChange}
+            isActive={isActive}
+            onSetActive={onSetActive}
+          />
+        );
+      }
+      
       case 'SHORT_ANSWER':
       case 'SUMMARY_COMPLETION':
       case 'NOTE_COMPLETION':

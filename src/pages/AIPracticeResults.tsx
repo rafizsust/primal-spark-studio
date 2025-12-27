@@ -121,7 +121,7 @@ export default function AIPracticeResults() {
 
       // Expand incorrect answers by default
       const incorrectSet = new Set(
-        matchingResult.questionResults
+        (matchingResult.questionResults || [])
           .filter(q => !q.isCorrect)
           .map(q => q.questionNumber)
       );
@@ -272,6 +272,9 @@ export default function AIPracticeResults() {
     );
   }
 
+  // Defensive check for questionResults
+  const questionResults = result.questionResults || [];
+
   // Option maps for MATCHING_SENTENCE_ENDINGS so results show the chosen text (not just the letter).
   const sentenceEndingOptionByQuestionNumber = useMemo(() => {
     const out: Record<number, Map<string, string>> = {};
@@ -408,7 +411,11 @@ export default function AIPracticeResults() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {result.questionResults.map((qResult) => {
+                {questionResults.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-4">
+                    No question results available.
+                  </div>
+                ) : questionResults.map((qResult) => {
                   const question = (test.questionGroups || [])
                     .flatMap(g => g.questions)
                     .find(q => q.question_number === qResult.questionNumber);

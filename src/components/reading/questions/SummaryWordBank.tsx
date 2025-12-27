@@ -172,18 +172,25 @@ export function SummaryWordBank({
             return (
               <div
                 key={`${wb.id}-${index}`}
-                draggable={!isUsed}
-                onDragStart={() => handleDragStart(item)}
-                onClick={() => !isUsed && handleWordClick(item)}
-                className={cn(
-                  "px-2 py-1.5 border rounded text-center cursor-pointer transition-all text-sm",
-                  isUsed
-                    ? "opacity-40 cursor-not-allowed bg-muted line-through"
-                    : "bg-background hover:border-primary hover:bg-primary/5 active:bg-primary/10"
-                )}
+                className="min-h-[36px]"
               >
-                <span className="font-bold mr-1">{wb.id}</span>
-                <span>{wb.text}</span>
+                {!isUsed ? (
+                  <div
+                    draggable
+                    onDragStart={() => handleDragStart(item)}
+                    onClick={() => handleWordClick(item)}
+                    className={cn(
+                      "px-2 py-1.5 border rounded text-center cursor-pointer transition-all text-sm",
+                      "bg-background hover:border-primary hover:bg-primary/5 active:bg-primary/10"
+                    )}
+                  >
+                    <span className="font-bold mr-1">{wb.id}</span>
+                    <span>{wb.text}</span>
+                  </div>
+                ) : (
+                  // Empty placeholder to maintain position, matching Matching Headings behavior
+                  <div className="h-full" />
+                )}
               </div>
             );
           })}
