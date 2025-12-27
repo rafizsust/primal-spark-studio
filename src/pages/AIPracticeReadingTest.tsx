@@ -271,7 +271,14 @@ export default function AIPracticeReadingTest() {
       return next;
     });
 
-    const matchingQ = matchingHeadingsQuestions.find(q => q.question_text === paragraphLabel);
+    // Find matching question - compare against both extracted label and full question_text
+    // paragraphLabel is just "A", "B" etc., but question_text might be "Paragraph A" or just "A"
+    const matchingQ = matchingHeadingsQuestions.find(q => {
+      const qText = q.question_text;
+      // Match if question_text equals label directly, or if it ends with the label (e.g., "Paragraph A" ends with "A")
+      const extractedLabel = qText.match(/(?:Paragraph\s+)?([A-Z])$/i)?.[1]?.toUpperCase();
+      return qText === paragraphLabel || extractedLabel === paragraphLabel;
+    });
     if (matchingQ) setAnswers(prev => ({ ...prev, [matchingQ.question_number]: headingId }));
   }, [matchingHeadingsQuestions]);
 
@@ -282,7 +289,12 @@ export default function AIPracticeReadingTest() {
       return next;
     });
 
-    const matchingQ = matchingHeadingsQuestions.find(q => q.question_text === paragraphLabel);
+    // Find matching question - same logic as handleHeadingDrop
+    const matchingQ = matchingHeadingsQuestions.find(q => {
+      const qText = q.question_text;
+      const extractedLabel = qText.match(/(?:Paragraph\s+)?([A-Z])$/i)?.[1]?.toUpperCase();
+      return qText === paragraphLabel || extractedLabel === paragraphLabel;
+    });
     if (matchingQ) setAnswers(prev => ({ ...prev, [matchingQ.question_number]: '' }));
   }, [matchingHeadingsQuestions]);
 
