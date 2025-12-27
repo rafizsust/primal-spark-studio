@@ -458,6 +458,7 @@ interface ListeningConfig {
   useWordCountMode?: boolean;
   speakerConfig?: SpeakerConfigInput;
   spellingMode?: SpellingModeConfig;
+  monologueMode?: boolean; // Single speaker mode like IELTS Part 4
 }
 
 // Reading question type prompts - generate structured data matching DB schema
@@ -1047,9 +1048,64 @@ ${characterInstructions}
 
 `;
 
-  // Handle FILL_IN_BLANK with optional Spelling Mode
+  // Handle FILL_IN_BLANK with optional Spelling Mode or Monologue Mode
   if (questionType === 'FILL_IN_BLANK') {
     const spellingMode = listeningConfig?.spellingMode;
+    const isMonologue = listeningConfig?.monologueMode === true;
+    
+    // Monologue mode (IELTS Part 4 style) - single speaker, no spelling
+    if (isMonologue) {
+      return basePrompt + `2. Create ${questionCount} fill-in-the-blank questions in IELTS Part 4 monologue style.
+
+CRITICAL RULES FOR MONOLOGUE MODE:
+- This is a SINGLE SPEAKER monologue (like a lecture, tour guide, or presentation)
+- Use "Speaker1:" prefix for ALL lines (required for TTS)
+- NO spelling of names - the listener must infer from context
+- Names should NOT be given as blanks UNLESS the speaker explicitly spells them out
+- Blanks should contain common nouns, dates, numbers, or descriptive phrases - NOT proper names
+
+CRITICAL BLANK POSITIONING:
+- VARY the position of blanks in sentences - do NOT always put them at the end
+- Use a mix of these patterns across questions:
+  - Start of sentence: "_____ is the most important factor in..."
+  - Middle of sentence: "The main attraction, called _____, was built in..."
+  - End of sentence: "The building was completed in _____."
+- Each question MUST have the blank ("_____") positioned RANDOMLY - approximately 1/3 at start, 1/3 in middle, 1/3 at end
+
+ANSWER VARIETY:
+- IMPORTANT: Vary answer lengths - use ONE word, TWO words, or THREE words AND/OR a number
+- Some answers should be exactly 1 word (e.g., "Tuesday", "registration")
+- Some answers should be exactly 2 words (e.g., "next Monday", "room three")
+- Some answers can be 3 words (e.g., "main conference hall")
+- Numbers are acceptable answers: "1985", "15", "222"
+- Maximum allowed is 3 words AND/OR a number
+
+Return ONLY valid JSON in this exact format:
+{
+  "dialogue": "Speaker1: Welcome to today's lecture on ancient architecture...\\nSpeaker1: The technique, known as barrel vaulting, was first developed...\\nSpeaker1: Our main focus today will be on three important structures...",
+  "instruction": "Complete the notes below. Write NO MORE THAN THREE WORDS AND/OR A NUMBER for each answer.",
+  "questions": [
+    {
+      "question_number": 1,
+      "question_text": "_____ was the primary building material used.",
+      "correct_answer": "Limestone",
+      "explanation": "Speaker mentions limestone as the primary material"
+    },
+    {
+      "question_number": 2,
+      "question_text": "The construction method, called _____, required special skills.",
+      "correct_answer": "barrel vaulting",
+      "explanation": "Speaker names barrel vaulting as the construction method"
+    },
+    {
+      "question_number": 3,
+      "question_text": "The temple was completed in _____.",
+      "correct_answer": "450 BC",
+      "explanation": "Speaker states the completion date"
+    }
+  ]
+}`;
+    }
     
     if (spellingMode?.enabled) {
       // IELTS Part 1 Style with spelling/number patterns
@@ -1075,9 +1131,19 @@ CRITICAL SPELLING & NUMBER RULES:
 - IMPORTANT SPELLING RULE: Only spell the part that appears IN THE BLANK, not the part already visible in the question text.
   - Example: If question is "Name: Dr. ____ Reed", and full name is "Evelyn Reed", spell "Evelyn" (E-V-E-L-Y-N) NOT "Reed"
   - The blank should contain what needs to be written, so spell ONLY that missing word/name
+- CRITICAL: Names should only be blank answers if they are SPELLED OUT by a speaker. If not spelled, use common nouns instead.
 - Use ${difficultyDesc} for names.
 - Include ${numberDesc} for number-based gaps.
 - Create realistic "distractor and correction" patterns (e.g., "Oh wait, it's 4, not 5").
+
+CRITICAL BLANK POSITIONING:
+- VARY the position of blanks in sentences - do NOT always put them at the end
+- Use a mix of these patterns across questions:
+  - Start/Label style: "Name: _____" or "Address: _____"
+  - Middle of phrase: "The booking is for _____ on Tuesday"
+  - End of phrase: "The postcode is _____"
+
+ANSWER VARIETY:
 - IMPORTANT: Vary answer lengths - use ONE word, TWO words, or THREE words AND/OR numbers:
   - Some answers should be exactly 1 word (e.g., "Tuesday", "Sharma")
   - Some answers should be exactly 2 words (e.g., "next Monday", "room three")
@@ -1110,14 +1176,29 @@ Return ONLY valid JSON in this exact format:
 }`;
     }
     
-    // Standard Fill-in-Blank (no spelling mode)
+    // Standard Fill-in-Blank (no spelling mode, dialogue with two speakers)
     return basePrompt + `2. Create ${questionCount} fill-in-the-blank questions.
-   - IMPORTANT: Vary answer lengths - use ONE word, TWO words, or THREE words AND/OR a number
-   - Some answers should be exactly 1 word (e.g., "Tuesday", "registration")
-   - Some answers should be exactly 2 words (e.g., "next Monday", "room three")
-   - Some answers can be 3 words (e.g., "main conference hall")
-   - Numbers are acceptable answers: "1985", "15", "222"
-   - Maximum allowed is 3 words AND/OR a number, but do NOT make all answers the same length
+
+CRITICAL RULES FOR STANDARD FILL-IN-BLANK:
+- Names should NOT be given as blanks UNLESS the speaker explicitly spells them out letter by letter
+- If a name is mentioned but NOT spelled, do NOT make it a blank answer
+- Blanks should contain common nouns, dates, numbers, locations, or descriptive phrases
+
+CRITICAL BLANK POSITIONING:
+- VARY the position of blanks in sentences - do NOT always put them at the end
+- Use a mix of these patterns across questions:
+  - Start of sentence: "_____ is required for registration."
+  - Middle of sentence: "The session on _____ will be held in Room 3."
+  - End of sentence: "The museum was founded in _____."
+- Approximately 1/3 of blanks should be at the start, 1/3 in the middle, and 1/3 at the end
+
+ANSWER VARIETY:
+- IMPORTANT: Vary answer lengths - use ONE word, TWO words, or THREE words AND/OR a number
+- Some answers should be exactly 1 word (e.g., "Tuesday", "registration")
+- Some answers should be exactly 2 words (e.g., "next Monday", "room three")
+- Some answers can be 3 words (e.g., "main conference hall")
+- Numbers are acceptable answers: "1985", "15", "222"
+- Maximum allowed is 3 words AND/OR a number, but do NOT make all answers the same length
 
 Return ONLY valid JSON in this exact format:
 {
@@ -1126,9 +1207,21 @@ Return ONLY valid JSON in this exact format:
   "questions": [
     {
       "question_number": 1,
-      "question_text": "The museum was founded in _____.",
-      "correct_answer": "1985",
-      "explanation": "Speaker1 says 'founded in 1985'"
+      "question_text": "_____ is the most popular exhibit.",
+      "correct_answer": "Ancient pottery",
+      "explanation": "Speaker1 mentions ancient pottery as most popular"
+    },
+    {
+      "question_number": 2,
+      "question_text": "The guided tour starts at _____.",
+      "correct_answer": "10:30",
+      "explanation": "Speaker1 says the tour starts at 10:30"
+    },
+    {
+      "question_number": 3,
+      "question_text": "Visitors need a _____ to enter the special exhibition.",
+      "correct_answer": "membership card",
+      "explanation": "Speaker2 mentions membership card is required"
     }
   ]
 }`;

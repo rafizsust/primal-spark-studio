@@ -40,11 +40,13 @@ export function TestStartOverlay({
 }: TestStartOverlayProps) {
   const [hasTestedAudio, setHasTestedAudio] = useState(module !== 'listening' && module !== 'speaking');
   const [hasTestedMic, setHasTestedMic] = useState(module !== 'speaking');
+  const [skippedAudioTest, setSkippedAudioTest] = useState(false);
 
   const needsAudioTest = module === 'listening' || module === 'speaking';
   const needsMicTest = module === 'speaking';
-  // Remove consent requirement - just need audio/mic tests for applicable modules
-  const isReady = (!needsAudioTest || hasTestedAudio) && (!needsMicTest || hasTestedMic);
+  // Audio test is optional for listening - users can skip and start directly
+  // Mic test is still required for speaking
+  const isReady = (!needsMicTest || hasTestedMic);
 
   const testAudio = () => {
     try {
@@ -162,18 +164,31 @@ export function TestStartOverlay({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Volume2 className="w-5 h-5 text-primary" />
-                  <span className="text-sm font-medium">Test Your Audio</span>
+                  <span className="text-sm font-medium">Test Your Audio {module === 'listening' ? '(Optional)' : ''}</span>
                 </div>
-                <Button 
-                  size="sm" 
-                  variant={hasTestedAudio ? "secondary" : "default"}
-                  onClick={testAudio}
-                >
-                  {hasTestedAudio ? '✓ Audio Works' : 'Play Test Sound'}
-                </Button>
+                <div className="flex gap-2">
+                  {module === 'listening' && !hasTestedAudio && !skippedAudioTest && (
+                    <Button 
+                      size="sm" 
+                      variant="ghost"
+                      onClick={() => setSkippedAudioTest(true)}
+                    >
+                      Skip
+                    </Button>
+                  )}
+                  <Button 
+                    size="sm" 
+                    variant={hasTestedAudio ? "secondary" : "default"}
+                    onClick={testAudio}
+                  >
+                    {hasTestedAudio ? '✓ Audio Works' : 'Play Test Sound'}
+                  </Button>
+                </div>
               </div>
               <p className="text-xs text-muted-foreground mt-2">
-                Make sure your speakers or headphones are working before starting.
+                {module === 'listening' 
+                  ? 'Recommended: Test your speakers or headphones before starting. You can skip this step if you prefer.'
+                  : 'Make sure your speakers or headphones are working before starting.'}
               </p>
             </div>
           )}

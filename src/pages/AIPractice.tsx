@@ -166,7 +166,7 @@ export default function AIPractice() {
 
   // Reading-specific configuration
   const [readingPassagePreset, setReadingPassagePreset] = useState<keyof typeof READING_PASSAGE_PRESETS>('medium');
-  const [customQuestionCount, setCustomQuestionCount] = useState(3);
+  const [customQuestionCount, setCustomQuestionCount] = useState(5);
 
   // Listening-specific configuration
   const [listeningAudioDuration, setListeningAudioDuration] = useState(LISTENING_AUDIO_CONFIG.defaultSeconds);
@@ -177,6 +177,9 @@ export default function AIPractice() {
   const [spellingTestScenario, setSpellingTestScenario] = useState<'phone_call' | 'hotel_booking' | 'job_inquiry'>('phone_call');
   const [spellingDifficulty, setSpellingDifficulty] = useState<'low' | 'high'>('low');
   const [numberFormat, setNumberFormat] = useState<'phone_number' | 'date' | 'postcode'>('phone_number');
+  
+  // Monologue mode for Fill-in-Blank (single speaker like IELTS Part 4)
+  const [monologueModeEnabled, setMonologueModeEnabled] = useState(false);
 
   // Speaker configuration
   const [speaker1Config, setSpeaker1Config] = useState<SpeakerConfig>({
@@ -191,7 +194,10 @@ export default function AIPractice() {
   });
 
   // Determine if current question type needs 2 speakers
-  const needsTwoSpeakers = MULTI_SPEAKER_QUESTION_TYPES.includes(listeningQuestionType);
+  // For Fill-in-Blank, this is overridden by monologue mode toggle
+  const needsTwoSpeakers = listeningQuestionType === 'FILL_IN_BLANK' 
+    ? !monologueModeEnabled 
+    : MULTI_SPEAKER_QUESTION_TYPES.includes(listeningQuestionType);
 
   // Loading state
   const [isGenerating, setIsGenerating] = useState(false);
@@ -259,13 +265,15 @@ export default function AIPractice() {
           speaker2: needsTwoSpeakers ? speaker2Config : undefined,
           useTwoSpeakers: needsTwoSpeakers,
         },
-        // IELTS Part 1 Spelling Mode settings (only for Fill-in-Blank)
-        spellingMode: listeningQuestionType === 'FILL_IN_BLANK' && spellingModeEnabled ? {
+        // IELTS Part 1 Spelling Mode settings (only for Fill-in-Blank when not in monologue mode)
+        spellingMode: listeningQuestionType === 'FILL_IN_BLANK' && spellingModeEnabled && !monologueModeEnabled ? {
           enabled: true,
           testScenario: spellingTestScenario,
           spellingDifficulty: spellingDifficulty,
           numberFormat: numberFormat,
         } : undefined,
+        // Monologue mode for Fill-in-Blank (like IELTS Part 4)
+        monologueMode: listeningQuestionType === 'FILL_IN_BLANK' && monologueModeEnabled,
       } : undefined;
 
       const { data, error } = await supabase.functions.invoke('generate-ai-practice', {
@@ -583,13 +591,13 @@ export default function AIPractice() {
                       value={[customQuestionCount]}
                       onValueChange={([v]) => setCustomQuestionCount(v)}
                       min={1}
-                      max={7}
+                      max={10}
                       step={1}
                     />
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>1 (Quick)</span>
-                      <span>3 (Default)</span>
-                      <span>7 (Max)</span>
+                      <span>5 (Default)</span>
+                      <span>10 (Max)</span>
                     </div>
                   </div>
                 </CardContent>
@@ -628,6 +636,35 @@ export default function AIPractice() {
                       ))}
                     </div>
                   </div>
+
+                  {/* Monologue Toggle - Only for Fill-in-Blank */}
+                  {listeningQuestionType === 'FILL_IN_BLANK' && (
+                    <div className="space-y-4 border-t pt-6">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-base font-medium flex items-center gap-2">
+                          <Headphones className="w-4 h-4" />
+                          Monologue Mode (IELTS Part 4 Style)
+                        </Label>
+                        <div 
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors cursor-pointer ${monologueModeEnabled ? 'bg-primary' : 'bg-muted'}`}
+                          onClick={() => {
+                            setMonologueModeEnabled(!monologueModeEnabled);
+                            // Disable spelling mode when monologue is enabled
+                            if (!monologueModeEnabled) {
+                              setSpellingModeEnabled(false);
+                            }
+                          }}
+                        >
+                          <span 
+                            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${monologueModeEnabled ? 'translate-x-6' : 'translate-x-1'}`}
+                          />
+                        </div>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Single speaker monologue (like a lecture or tour guide). Spelling mode is not available in this mode.
+                      </p>
+                    </div>
+                  )}
 
                   {/* Speaker Configuration */}
                   <div className="space-y-4 border-t pt-6">
@@ -799,8 +836,8 @@ export default function AIPractice() {
                     })()}
                   </div>
 
-                  {/* IELTS Part 1 Spelling Mode - Only for Fill-in-Blank */}
-                  {listeningQuestionType === 'FILL_IN_BLANK' && (
+                  {/* IELTS Part 1 Spelling Mode - Only for Fill-in-Blank when NOT in monologue mode */}
+                  {listeningQuestionType === 'FILL_IN_BLANK' && !monologueModeEnabled && (
                     <div className="space-y-4 border-t pt-6">
                       <div className="flex items-center justify-between">
                         <Label className="text-base font-medium flex items-center gap-2">
@@ -875,14 +912,14 @@ export default function AIPractice() {
                       value={[listeningQuestionCount]}
                       onValueChange={([v]) => setListeningQuestionCount(v)}
                       min={1}
-                      max={7}
+                      max={10}
                       step={1}
                       className="w-full"
                     />
                     <div className="flex justify-between text-xs text-muted-foreground">
                       <span>1 (Quick)</span>
                       <span>5 (Default)</span>
-                      <span>7 (Max)</span>
+                      <span>10 (Max)</span>
                     </div>
                   </div>
 
