@@ -615,6 +615,13 @@ Return ONLY valid JSON in this exact format:
       const fillVariations = ['standard', 'paragraph', 'bullets', 'headings', 'note_style'];
       const selectedVariation = fillVariations[Math.floor(Math.random() * fillVariations.length)];
       
+      // Randomly select word limit (1, 2, or 3 words)
+      const wordLimitOptions = [1, 2, 3];
+      const selectedWordLimit = wordLimitOptions[Math.floor(Math.random() * wordLimitOptions.length)];
+      const wordLimitText = selectedWordLimit === 1 ? 'ONE WORD ONLY' : 
+                            selectedWordLimit === 2 ? 'NO MORE THAN TWO WORDS' : 
+                            'NO MORE THAN THREE WORDS';
+      
       let variationInstructions = '';
       let variationFormat = '';
       
@@ -667,8 +674,14 @@ Return ONLY valid JSON in this exact format:
       }
       
       return basePrompt + `2. Create ${questionCount} fill-in-the-blank/sentence completion questions.
-   - IMPORTANT: Vary answer lengths - use a MIX of ONE, TWO, and THREE word answers (max 3 words)
-   - Some answers should be 1 word, some 2 words, some 3 words - do NOT make them all the same length${variationInstructions}
+
+CRITICAL WORD LIMIT RULE - STRICTLY ENFORCED:
+- Maximum word limit: ${selectedWordLimit} word(s) per answer
+- Every answer MUST be ${selectedWordLimit === 1 ? 'exactly 1 word' : selectedWordLimit === 2 ? '1 or 2 words (never 3+)' : '1, 2, or 3 words (never 4+)'}
+- NEVER exceed the word limit - this violates IELTS standards
+- If word limit is 3, vary lengths naturally: some 1-word, some 2-word, some 3-word answers
+- If word limit is 2, use mix of 1-word and 2-word answers
+- If word limit is 1, ALL answers must be exactly 1 word${variationInstructions}
 
 Return ONLY valid JSON in this exact format:
 {
@@ -676,12 +689,12 @@ Return ONLY valid JSON in this exact format:
     "title": "The title of the passage",
     "content": "The full passage text with paragraph labels like [A], [B], etc."
   },
-  "instruction": "Complete the sentences below. Choose NO MORE THAN THREE WORDS from the passage for each answer.",${variationFormat}
+  "instruction": "Complete the sentences below. Choose ${wordLimitText} from the passage for each answer.",${variationFormat}
   "questions": [
     {
       "question_number": 1,
       "question_text": "According to the passage, the main cause of _____ is pollution.",
-      "correct_answer": "climate change",
+      "correct_answer": "${selectedWordLimit === 1 ? 'pollution' : selectedWordLimit === 2 ? 'climate change' : 'global climate change'}",
       "explanation": "Found in paragraph A: 'the main cause of climate change is pollution'"${selectedVariation === 'headings' ? ',\n      "heading": "Environmental Impact"' : ''}
     }
   ]
@@ -729,12 +742,13 @@ Return ONLY valid JSON in this exact format:
     case 'TABLE_COMPLETION':
       return basePrompt + `2. Create a table completion task with ${questionCount} blanks to fill.
 
-CRITICAL RULES:
-1. Answer length MUST VARY - use a MIX of ONE word and TWO word answers:
-   - Some answers should be exactly 1 word (e.g., "pollution", "technology")
-   - Some answers should be exactly 2 words (e.g., "water supply", "climate change")
-   - DO NOT make all answers the same length!
-   - Maximum allowed is 2 words, but prefer a natural mix.
+CRITICAL RULES - FOLLOW EXACTLY:
+1. WORD LIMIT: Maximum TWO words per answer. STRICTLY ENFORCED.
+   - Every answer MUST be 1 or 2 words maximum
+   - NEVER use 3+ word answers - this violates IELTS standards
+   - Vary the lengths naturally: mix of 1-word and 2-word answers
+   - Example valid answers: "pollution" (1 word), "water supply" (2 words)
+   - Example INVALID: "clean water supply" (3 words - NEVER DO THIS)
 2. Tables MUST have EXACTLY 3 COLUMNS (no more, no less).
 3. Use inline blanks with __ (double underscores) within cell content, NOT separate cells for blanks.
    - Example: "Clean air and water, pollination of crops, and __" where __ is the blank

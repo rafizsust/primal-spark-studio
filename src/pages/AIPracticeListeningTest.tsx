@@ -132,6 +132,8 @@ export default function AIPracticeListeningTest() {
   const [audioReady, setAudioReady] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const [audioEnded, setAudioEnded] = useState(false);
+  const [reviewTimeLeft, setReviewTimeLeft] = useState(30);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   
@@ -175,7 +177,10 @@ export default function AIPracticeListeningTest() {
         audio.addEventListener('timeupdate', () => {
           setAudioProgress((audio.currentTime / audio.duration) * 100 || 0);
         });
-        audio.addEventListener('ended', () => setIsPlaying(false));
+        audio.addEventListener('ended', () => {
+          setIsPlaying(false);
+          setAudioEnded(true);
+        });
         audio.addEventListener('error', () => setAudioError('Failed to load audio'));
       } catch {
         setAudioError('Audio generation failed. You can still practice with the transcript.');
@@ -189,7 +194,10 @@ export default function AIPracticeListeningTest() {
       audio.addEventListener('timeupdate', () => {
         setAudioProgress((audio.currentTime / audio.duration) * 100 || 0);
       });
-      audio.addEventListener('ended', () => setIsPlaying(false));
+      audio.addEventListener('ended', () => {
+        setIsPlaying(false);
+        setAudioEnded(true);
+      });
       audio.addEventListener('error', () => setAudioError('Failed to load audio'));
     } else {
       setAudioError('Audio not available. You can practice with the transcript below.');
@@ -429,6 +437,22 @@ export default function AIPracticeListeningTest() {
     };
   }, [contrastMode, textSizeMode]);
 
+  // 30-second review countdown after audio ends
+  useEffect(() => {
+    if (!audioEnded || !testStarted) return;
+    
+    if (reviewTimeLeft <= 0) {
+      handleSubmit();
+      return;
+    }
+
+    const timer = setInterval(() => {
+      setReviewTimeLeft(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [audioEnded, reviewTimeLeft, testStarted]);
+
   // Handle test start from overlay
   const handleStartTest = useCallback(() => {
     setShowStartOverlay(false);
@@ -482,6 +506,11 @@ export default function AIPracticeListeningTest() {
                 <Sparkles className="w-3 h-3" />
                 AI Practice
               </Badge>
+              {audioEnded && (
+                <Badge variant="destructive" className="gap-1 animate-pulse">
+                  Review: {reviewTimeLeft}s
+                </Badge>
+              )}
             </div>
 
             {/* Audio Player in header */}
