@@ -264,22 +264,14 @@ export default function AIPracticeResults() {
     return 'bg-destructive/20 text-destructive border-destructive/30';
   };
 
-  if (!test || !result) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
-  // Defensive check for questionResults
-  const questionResults = result.questionResults || [];
-
   // Option maps for MATCHING_SENTENCE_ENDINGS so results show the chosen text (not just the letter).
+  // IMPORTANT: This hook must run on every render (even before test/result are loaded)
+  // to avoid React hook order mismatch.
   const sentenceEndingOptionByQuestionNumber = useMemo(() => {
     const out: Record<number, Map<string, string>> = {};
 
-    for (const g of test.questionGroups || []) {
+    const groups = test?.questionGroups ?? [];
+    for (const g of groups) {
       if (g.question_type !== 'MATCHING_SENTENCE_ENDINGS') continue;
 
       const raw: any = g.options || {};
@@ -303,7 +295,18 @@ export default function AIPracticeResults() {
     }
 
     return out;
-  }, [test.questionGroups]);
+  }, [test?.questionGroups]);
+
+  // Defensive check for questionResults
+  const questionResults = result?.questionResults ?? [];
+
+  if (!test || !result) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   const percentage = Math.round((result.score / result.totalQuestions) * 100);
 
