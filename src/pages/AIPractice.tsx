@@ -349,37 +349,78 @@ export default function AIPractice() {
       clearInterval(stepInterval);
       playErrorSound();
       
-      // Parse error message for user-friendly display
-      let errorMessage = err.message || 'Failed to generate practice test. Please try again.';
+      // Parse error message for comprehensive user-friendly display
+      const rawMessage = err.message || '';
+      let errorTitle = 'Generation Failed';
+      let errorMessage = 'Something went wrong. Please try again.';
+      let solution = '';
       let showSettingsLink = false;
       
-      // Handle common API errors with user-friendly messages
-      if (errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED') || errorMessage.includes('429')) {
-        errorMessage = 'AI quota limit reached. Please wait a few minutes or update your Gemini API key.';
+      // Handle common API errors with comprehensive user-friendly messages and solutions
+      if (rawMessage.includes('quota') || rawMessage.includes('RESOURCE_EXHAUSTED') || rawMessage.includes('429') || rawMessage.includes('rate limit')) {
+        errorTitle = 'Usage Limit Reached';
+        errorMessage = 'Your AI API has reached its usage limit.';
+        solution = 'Wait 1-2 minutes and try again, or upgrade your Google AI Studio plan for higher limits.';
         showSettingsLink = true;
-      } else if (errorMessage.includes('PERMISSION_DENIED') || errorMessage.includes('403')) {
-        errorMessage = 'API access denied. Please check your Gemini API key.';
+      } else if (rawMessage.includes('PERMISSION_DENIED') || rawMessage.includes('403') || rawMessage.includes('access denied')) {
+        errorTitle = 'Access Denied';
+        errorMessage = 'Your API key does not have the required permissions.';
+        solution = 'Check that your Gemini API key is valid and has all features enabled in Google AI Studio.';
         showSettingsLink = true;
-      } else if (errorMessage.includes('non-2xx') || errorMessage.includes('status code')) {
-        errorMessage = 'AI service temporarily unavailable. Please try again in a moment.';
-      } else if (errorMessage.includes('API key') || errorMessage.includes('authentication')) {
-        errorMessage = 'Invalid API key. Please update your Gemini API key.';
+      } else if (rawMessage.includes('503') || rawMessage.includes('temporarily unavailable') || rawMessage.includes('UNAVAILABLE')) {
+        errorTitle = 'Service Temporarily Unavailable';
+        errorMessage = 'The AI service is experiencing high demand.';
+        solution = 'This is usually temporary. Please wait 30 seconds and try again.';
+      } else if (rawMessage.includes('500') || rawMessage.includes('INTERNAL')) {
+        errorTitle = 'AI Service Error';
+        errorMessage = 'The AI service encountered an internal error.';
+        solution = 'This is a temporary issue. Please try again in a moment. If it persists, try a different topic.';
+      } else if (rawMessage.includes('API key') || rawMessage.includes('authentication') || rawMessage.includes('invalid')) {
+        errorTitle = 'Invalid API Key';
+        errorMessage = 'Your Gemini API key appears to be invalid or expired.';
+        solution = 'Go to Settings and update your API key with a valid key from Google AI Studio.';
         showSettingsLink = true;
+      } else if (rawMessage.includes('Audio generation failed') || rawMessage.includes('TTS')) {
+        errorTitle = 'Audio Generation Failed';
+        errorMessage = 'Could not generate audio for the listening test.';
+        if (rawMessage.includes('rate limit') || rawMessage.includes('quota')) {
+          solution = 'Your API has reached its audio generation limit. Wait a few minutes or upgrade your plan.';
+          showSettingsLink = true;
+        } else if (rawMessage.includes('permissions')) {
+          solution = 'Enable Text-to-Speech in your Google AI Studio API settings.';
+          showSettingsLink = true;
+        } else {
+          solution = 'Wait a moment and try again. If the issue persists, try reducing the audio duration.';
+        }
+      } else if (rawMessage.includes('parse') || rawMessage.includes('JSON')) {
+        errorTitle = 'Content Generation Issue';
+        errorMessage = 'The AI produced an unexpected response format.';
+        solution = 'Please try again. If this keeps happening, try a different topic or question type.';
+      } else if (rawMessage.includes('timeout') || rawMessage.includes('network')) {
+        errorTitle = 'Connection Issue';
+        errorMessage = 'Could not connect to the AI service.';
+        solution = 'Check your internet connection and try again.';
+      } else {
+        // Generic fallback with the original message (cleaned up)
+        errorMessage = rawMessage.length > 100 ? rawMessage.substring(0, 100) + '...' : rawMessage;
+        solution = 'Please try again. If the issue persists, try a different topic or contact support.';
       }
       
       toast({
-        title: 'Generation Failed',
+        title: errorTitle,
         description: (
           <div className="flex flex-col gap-2">
-            <span>{errorMessage}</span>
+            <span className="font-medium">{errorMessage}</span>
+            <span className="text-sm opacity-90">💡 {solution}</span>
             {showSettingsLink && (
-              <Link to="/settings" className="text-primary underline text-sm font-medium hover:text-primary/80">
+              <Link to="/settings" className="text-primary-foreground underline text-sm font-medium hover:opacity-80 mt-1">
                 Go to Settings →
               </Link>
             )}
           </div>
         ),
         variant: 'destructive',
+        duration: 8000,
       });
     } finally {
       setIsGenerating(false);

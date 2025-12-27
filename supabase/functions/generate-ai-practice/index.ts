@@ -1362,21 +1362,42 @@ Return ONLY valid JSON (no markdown code blocks) in this exact format:
 }`;
 
     case 'MULTIPLE_CHOICE_MULTIPLE':
-      return basePrompt + `2. Create ${questionCount} multiple choice questions where listeners select TWO correct answers.
+      // For MCQ Multiple, we create ONE question "set" where test-takers must pick N answers.
+      // questionCount here represents the number of answers to select (e.g., 2 or 3)
+      const numMCQAnswers = Math.min(questionCount, 3); // Cap at 3 to keep it reasonable
+      const mcqAnswerWord = numMCQAnswers === 2 ? 'TWO' : numMCQAnswers === 3 ? 'THREE' : String(numMCQAnswers);
+
+      return basePrompt + `2. Create ONE multiple choice question where listeners must select ${mcqAnswerWord} correct answers from the options.
+
+IMPORTANT:
+- The question group spans ${numMCQAnswers} question numbers: 1 to ${numMCQAnswers}
+- Return ${numMCQAnswers} question objects with question_number 1..${numMCQAnswers}
+- ALL question objects must have the SAME question_text, SAME options, SAME correct_answer, SAME explanation
+- The correct_answer must be a comma-separated list of ${numMCQAnswers} letters (e.g., "B,D" or "A,C,E")
+- DO NOT always use the same letters - randomize which options are correct
+- Provide 5-6 options total so there are distractors
 
 Return ONLY valid JSON (no markdown code blocks) in this exact format:
 {
-  "dialogue": "Speaker1: There are several benefits...\\nSpeaker2: Can you list them?...",
+  "dialogue": "Speaker1: There are several benefits to our new system...\\nSpeaker2: Can you tell me more about them?...",
   "speaker_names": {"Speaker1": "Manager", "Speaker2": "Employee"},
-  "instruction": "Choose TWO letters, A-E.",
+  "instruction": "Questions 1-${numMCQAnswers}. Choose ${mcqAnswerWord} letters, A-E.",
   "questions": [
     {
       "question_number": 1,
-      "question_text": "Which TWO benefits are mentioned?",
+      "question_text": "Which ${mcqAnswerWord} benefits are mentioned by the speaker?",
       "options": ["A Cost savings", "B Time efficiency", "C Better quality", "D More flexibility", "E Improved safety"],
-      "correct_answer": "A,C",
-      "explanation": "Cost savings and better quality are mentioned",
-      "max_answers": 2
+      "correct_answer": "B,D",
+      "explanation": "B is correct because time efficiency is explicitly mentioned. D is correct because flexibility is discussed.",
+      "max_answers": ${numMCQAnswers}
+    },
+    {
+      "question_number": ${numMCQAnswers},
+      "question_text": "Which ${mcqAnswerWord} benefits are mentioned by the speaker?",
+      "options": ["A Cost savings", "B Time efficiency", "C Better quality", "D More flexibility", "E Improved safety"],
+      "correct_answer": "B,D",
+      "explanation": "B is correct because time efficiency is explicitly mentioned. D is correct because flexibility is discussed.",
+      "max_answers": ${numMCQAnswers}
     }
   ]
 }`;
@@ -1883,6 +1904,14 @@ serve(async (req) => {
         groupOptions = { 
           noteCategories, 
           display_mode: 'note_style' 
+        };
+      } else if (questionType === 'MULTIPLE_CHOICE_MULTIPLE' && parsed.questions?.[0]?.options) {
+        // For MCQ Multiple, store max_answers + options at GROUP level matching reading approach
+        const maxAnswers = parsed.questions?.[0]?.max_answers || Math.min(questionCount, 3);
+        groupOptions = {
+          options: parsed.questions[0].options,
+          option_format: 'A',
+          max_answers: maxAnswers,
         };
       } else if (questionType.includes('MULTIPLE_CHOICE') && parsed.questions?.[0]?.options) {
         groupOptions = { options: parsed.questions[0].options };
