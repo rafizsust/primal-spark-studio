@@ -560,7 +560,7 @@ function getReadingPrompt(
   questionCount: number,
   readingConfig?: ReadingConfig
 ): string {
-  const difficultyDesc = difficulty === 'easy' ? 'Band 5-6' : difficulty === 'medium' ? 'Band 6-7' : difficulty === 'hard' ? 'Band 7-8' : 'Band 8.5-9 (Expert level - extremely challenging, requires near-native comprehension, subtle inferences, and mastery of nuanced vocabulary)';
+  const difficultyDesc = difficulty === 'easy' ? 'Band 5-5.5' : difficulty === 'medium' ? 'Band 6-6.5' : difficulty === 'hard' ? 'Band 7-7.5' : 'Band 8-9 (Expert level - extremely challenging, requires near-native comprehension, subtle inferences, and mastery of nuanced vocabulary)';
   
   // Determine passage specifications based on config
   let paragraphCount = readingConfig?.paragraphCount || 6;
@@ -1084,7 +1084,7 @@ function getListeningPrompt(
   scenario: any,
   listeningConfig?: ListeningConfig
 ): string {
-  const difficultyDesc = difficulty === 'easy' ? 'Band 5-6' : difficulty === 'medium' ? 'Band 6-7' : difficulty === 'hard' ? 'Band 7-8' : 'Band 8.5-9 (Expert level - extremely challenging, requires near-native comprehension, subtle inferences, and mastery of nuanced vocabulary)';
+  const difficultyDesc = difficulty === 'easy' ? 'Band 5-5.5' : difficulty === 'medium' ? 'Band 6-6.5' : difficulty === 'hard' ? 'Band 7-7.5' : 'Band 8-9 (Expert level - extremely challenging, requires near-native comprehension, subtle inferences, and mastery of nuanced vocabulary)';
   
   // Determine transcript specifications based on config
   // Default: ~225 words (~90 seconds of audio)
