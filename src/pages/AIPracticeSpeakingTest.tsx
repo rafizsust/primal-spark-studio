@@ -48,9 +48,17 @@ type TestPhase =
   | 'submitting'
   | 'done';
 
-interface PartRecording {
+interface AudioSegmentMeta {
+  key: string;
+  partNumber: 1 | 2 | 3;
+  questionId: string;
+  questionNumber: number;
+  questionText: string;
   chunks: Blob[];
-  transcript: string;
+  duration: number;
+}
+
+interface PartRecordingMeta {
   startTime: number;
   duration?: number;
 }
@@ -77,11 +85,15 @@ export default function AIPracticeSpeakingTest() {
 
   // Recording state
   const [isRecording, setIsRecording] = useState(false);
-  const [recordings, setRecordings] = useState<Record<number, PartRecording>>({
-    1: { chunks: [], transcript: '', startTime: 0 },
-    2: { chunks: [], transcript: '', startTime: 0 },
-    3: { chunks: [], transcript: '', startTime: 0 },
+
+  const [recordings, setRecordings] = useState<Record<number, PartRecordingMeta>>({
+    1: { startTime: 0 },
+    2: { startTime: 0 },
+    3: { startTime: 0 },
   });
+
+  // Store audio per question (so we can transcribe + show transcript question-by-question)
+  const [audioSegments, setAudioSegments] = useState<Record<string, AudioSegmentMeta>>({});
 
   // Refs for state access in callbacks (avoid stale closures)
   const phaseRef = useRef<TestPhase>(phase);
@@ -102,8 +114,19 @@ export default function AIPracticeSpeakingTest() {
   const audioChunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const part2SpeakStartRef = useRef<number>(0);
+
+  const activeAudioKeyRef = useRef<string | null>(null);
+  const activeAudioStartRef = useRef<number>(0);
+
   const recordingsRef = useRef(recordings);
-  useEffect(() => { recordingsRef.current = recordings; }, [recordings]);
+  useEffect(() => {
+    recordingsRef.current = recordings;
+  }, [recordings]);
+
+  const audioSegmentsRef = useRef(audioSegments);
+  useEffect(() => {
+    audioSegmentsRef.current = audioSegments;
+  }, [audioSegments]);
 
   // Get current part data
   const speakingParts = useMemo(() => {
@@ -131,10 +154,59 @@ export default function AIPracticeSpeakingTest() {
   });
 
   // Forward declarations for functions (to handle circular dependencies)
+  const getActiveSegmentMeta = (): Omit<AudioSegmentMeta, 'chunks' | 'duration'> | null => {
+    const part = currentPartRef.current;
+    const parts = speakingPartsRef.current;
+    const qIdx = questionIndexRef.current;
+
+    if (part === 1) {
+      const q = parts.part1?.questions?.[qIdx];
+      if (!q) return null;
+      return {
+        key: `part1-q${q.id}`,
+        partNumber: 1,
+        questionId: q.id,
+        questionNumber: q.question_number,
+        questionText: q.question_text,
+      };
+    }
+
+    if (part === 2) {
+      const q = parts.part2?.questions?.[0];
+      if (!q) return null;
+      return {
+        key: `part2-q${q.id}`,
+        partNumber: 2,
+        questionId: q.id,
+        questionNumber: q.question_number,
+        questionText: q.question_text,
+      };
+    }
+
+    const q = parts.part3?.questions?.[qIdx];
+    if (!q) return null;
+    return {
+      key: `part3-q${q.id}`,
+      partNumber: 3,
+      questionId: q.id,
+      questionNumber: q.question_number,
+      questionText: q.question_text,
+    };
+  };
+
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+
+      const meta = getActiveSegmentMeta();
+      if (!meta) {
+        stream.getTracks().forEach((t) => t.stop());
+        throw new Error('Could not determine which question to record.');
+      }
+
+      activeAudioKeyRef.current = meta.key;
+      activeAudioStartRef.current = Date.now();
 
       audioChunksRef.current = [];
       recorder.ondataavailable = (e) => {
@@ -147,7 +219,7 @@ export default function AIPracticeSpeakingTest() {
       mediaRecorderRef.current = recorder;
       setIsRecording(true);
 
-      // Update recording start time
+      // Update part recording start time
       const part = currentPartRef.current;
       setRecordings((prev) => ({
         ...prev,
@@ -173,13 +245,19 @@ export default function AIPracticeSpeakingTest() {
     }
     setIsRecording(false);
 
-    // Save chunks to recording
-    const part = currentPartRef.current;
-    setRecordings((prev) => ({
+    const meta = getActiveSegmentMeta();
+    const key = activeAudioKeyRef.current ?? meta?.key;
+    if (!key || !meta) return;
+
+    const duration = Math.max(0, (Date.now() - activeAudioStartRef.current) / 1000);
+
+    // Save per-question chunks
+    setAudioSegments((prev) => ({
       ...prev,
-      [part]: {
-        ...prev[part],
-        chunks: [...prev[part].chunks, ...audioChunksRef.current],
+      [key]: {
+        ...meta,
+        chunks: [...audioChunksRef.current],
+        duration,
       },
     }));
   };
@@ -198,51 +276,56 @@ export default function AIPracticeSpeakingTest() {
     }
   };
 
-  const endTest = () => {
-    setPhase('ending');
-    speakText("Thank you. That is the end of the speaking test.");
-  };
-
   const submitTest = async () => {
     setPhase('submitting');
 
     try {
-      // Prepare audio data
-      const partAudios = [];
-      const recs = recordingsRef.current;
-      
-      for (const part of [1, 2, 3] as const) {
-        const rec = recs[part];
-        if (rec.chunks.length > 0) {
-          const blob = new Blob(rec.chunks, { type: 'audio/webm' });
-          const reader = new FileReader();
-          const base64 = await new Promise<string>((resolve) => {
-            reader.onloadend = () => resolve((reader.result as string).split(',')[1]);
-            reader.readAsDataURL(blob);
-          });
+      const segments = audioSegmentsRef.current;
+      const keys = Object.keys(segments);
 
-          partAudios.push({
-            partNumber: part,
-            audioBase64: base64,
-            duration: rec.duration || Math.floor((Date.now() - rec.startTime) / 1000),
-          });
-        }
+      if (!keys.length) {
+        toast({
+          title: 'No Recording Found',
+          description: 'No audio was recorded. Please try again and ensure your microphone is working.',
+          variant: 'destructive',
+        });
+        setPhase('done');
+        return;
+      }
+
+      // Convert segments to data URLs (send per-question audio)
+      const audioData: Record<string, string> = {};
+      const durations: Record<string, number> = {};
+
+      for (const key of keys) {
+        const seg = segments[key];
+        const blob = new Blob(seg.chunks, { type: 'audio/webm' });
+        durations[key] = seg.duration;
+
+        // Skip empty blobs
+        if (blob.size < 512) continue;
+
+        const dataUrl = await new Promise<string>((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(String(reader.result));
+          reader.readAsDataURL(blob);
+        });
+
+        audioData[key] = dataUrl;
       }
 
       // Calculate Part 2 speaking duration for fluency flag
-      const part2Duration = recs[2].duration || 0;
+      const part2Duration = Object.entries(segments)
+        .filter(([, s]) => s.partNumber === 2)
+        .reduce((acc, [, s]) => acc + (s.duration || 0), 0);
+
       const fluencyFlag = part2Duration > 0 && part2Duration < PART2_MIN_SPEAKING;
 
-      // Submit for evaluation
       const { error } = await supabase.functions.invoke('evaluate-ai-speaking', {
         body: {
           testId,
-          partAudios,
-          transcripts: {
-            1: recs[1].transcript,
-            2: recs[2].transcript,
-            3: recs[3].transcript,
-          },
+          audioData,
+          durations,
           topic: test?.topic,
           difficulty: test?.difficulty,
           part2SpeakingDuration: part2Duration,
@@ -253,8 +336,6 @@ export default function AIPracticeSpeakingTest() {
       if (error) throw error;
 
       setPhase('done');
-      
-      // Navigate to results
       navigate(`/ai-practice/speaking/results/${testId}`);
     } catch (err) {
       console.error('Submission error:', err);
@@ -266,6 +347,7 @@ export default function AIPracticeSpeakingTest() {
       setPhase('done');
     }
   };
+
 
   const startPart3 = () => {
     setCurrentPart(3);
@@ -306,16 +388,16 @@ export default function AIPracticeSpeakingTest() {
   };
 
   const startPart2Speaking = () => {
-    // User clicked to start speaking early - clear prep timer and start recording immediately
+    // User clicked to start speaking early.
+    // IMPORTANT: timer should start after the examiner finishes speaking.
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
     }
-    // Directly start Part 2 recording
-    setPhase('part2_recording');
-    setTimeLeft(TIMING.PART2_SPEAK);
-    part2SpeakStartRef.current = Date.now();
-    startRecording();
+
+    setTimeLeft(0);
+
+    // Keep phase as part2_prep so onEnd starts recording + timer after TTS finishes
     speakText("Please start speaking now. You have two minutes.");
   };
 
