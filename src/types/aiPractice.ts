@@ -4,7 +4,7 @@ import type { Json } from '@/integrations/supabase/types';
 
 export type PracticeModule = 'reading' | 'listening' | 'writing' | 'speaking';
 
-export type DifficultyLevel = 'easy' | 'medium' | 'hard';
+export type DifficultyLevel = 'easy' | 'medium' | 'hard' | 'expert';
 
 // Reading question types (12 types)
 export type ReadingQuestionType = 

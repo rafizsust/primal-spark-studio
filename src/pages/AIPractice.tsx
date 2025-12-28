@@ -86,6 +86,7 @@ const DIFFICULTY_OPTIONS: { value: DifficultyLevel; label: string; color: string
   { value: 'easy', label: 'Easy', color: 'bg-success/20 text-success border-success/30' },
   { value: 'medium', label: 'Medium', color: 'bg-warning/20 text-warning border-warning/30' },
   { value: 'hard', label: 'Hard', color: 'bg-destructive/20 text-destructive border-destructive/30' },
+  { value: 'expert', label: 'Expert', color: 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30' },
 ];
 
 // Reading passage specifications - paragraph-based
