@@ -44,3 +44,9 @@ verify_jwt = true
 
 [functions.explain-answer-followup]
 verify_jwt = true
+
+[functions.ai-speaking-session]
+verify_jwt = true
+
+[functions.evaluate-ai-speaking]
+verify_jwt = true
