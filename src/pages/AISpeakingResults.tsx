@@ -49,17 +49,34 @@ interface PartAnalysis {
   areas_for_improvement: string[];
 }
 
+interface ModelAnswer {
+  partNumber: number;
+  question: string;
+  candidateResponse?: string;
+  modelAnswer: string;
+  keyFeatures: string[];
+}
+
 interface EvaluationReport {
   overall_band: number;
+  overallBand?: number;
   fluency_coherence: CriterionScore;
+  fluencyCoherence?: CriterionScore;
   lexical_resource: CriterionScore;
+  lexicalResource?: { score: number; feedback: string; examples: string[]; lexicalUpgrades?: LexicalUpgrade[] };
   grammatical_range: CriterionScore;
+  grammaticalRange?: CriterionScore;
   pronunciation: CriterionScore;
   lexical_upgrades: LexicalUpgrade[];
   part_analysis: PartAnalysis[];
+  partAnalysis?: Array<{ partNumber: number; strengths: string[]; improvements: string[] }>;
   improvement_priorities: string[];
+  priorityImprovements?: string[];
   strengths_to_maintain: string[];
+  keyStrengths?: string[];
   examiner_notes: string;
+  summary?: string;
+  modelAnswers?: ModelAnswer[];
 }
 
 interface SpeakingResult {
@@ -251,11 +268,12 @@ export default function AISpeakingResults() {
           </Card>
 
           <Tabs defaultValue="criteria" className="mb-6">
-            <TabsList className="grid w-full grid-cols-4">
+            <TabsList className="grid w-full grid-cols-5">
               <TabsTrigger value="criteria">Criteria</TabsTrigger>
-              <TabsTrigger value="lexical">Lexical Upgrades</TabsTrigger>
-              <TabsTrigger value="parts">Part Analysis</TabsTrigger>
-              <TabsTrigger value="improve">Improvements</TabsTrigger>
+              <TabsTrigger value="model">Model Answers</TabsTrigger>
+              <TabsTrigger value="lexical">Lexical</TabsTrigger>
+              <TabsTrigger value="parts">Parts</TabsTrigger>
+              <TabsTrigger value="improve">Improve</TabsTrigger>
             </TabsList>
 
             {/* Criteria Breakdown */}
@@ -322,6 +340,66 @@ export default function AISpeakingResults() {
                   </CardContent>
                 </Card>
               ))}
+            </TabsContent>
+
+            {/* Model Answers */}
+            <TabsContent value="model" className="mt-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Sparkles className="w-5 h-5 text-primary" />
+                    Band 8+ Model Answers
+                  </CardTitle>
+                  <CardDescription>
+                    Learn from example responses that demonstrate high-scoring techniques
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {report.modelAnswers && report.modelAnswers.length > 0 ? (
+                    report.modelAnswers.map((model, i) => (
+                      <div key={i} className="border rounded-lg p-4 space-y-4">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">Part {model.partNumber}</Badge>
+                          <span className="text-sm font-medium">{model.question}</span>
+                        </div>
+
+                        {model.candidateResponse && (
+                          <div className="pl-4 border-l-2 border-muted">
+                            <p className="text-xs text-muted-foreground mb-1">Your response:</p>
+                            <p className="text-sm italic text-muted-foreground">{model.candidateResponse}</p>
+                          </div>
+                        )}
+
+                        <div className="pl-4 border-l-2 border-success">
+                          <p className="text-xs text-success mb-1 font-medium">Band 8+ Model Answer:</p>
+                          <p className="text-sm">{model.modelAnswer}</p>
+                        </div>
+
+                        {model.keyFeatures && model.keyFeatures.length > 0 && (
+                          <div className="bg-primary/5 rounded-lg p-3">
+                            <p className="text-xs font-medium text-primary mb-2 flex items-center gap-1">
+                              <Lightbulb className="w-3 h-3" />
+                              Why this works:
+                            </p>
+                            <ul className="space-y-1">
+                              {model.keyFeatures.map((feature, j) => (
+                                <li key={j} className="text-xs text-muted-foreground flex items-start gap-2">
+                                  <CheckCircle2 className="w-3 h-3 text-success flex-shrink-0 mt-0.5" />
+                                  {feature}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-muted-foreground text-center py-8">
+                      Model answers will appear here after your test is fully evaluated.
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
             </TabsContent>
 
             {/* Lexical Upgrades Table */}

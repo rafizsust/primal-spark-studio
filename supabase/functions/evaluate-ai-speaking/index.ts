@@ -93,7 +93,7 @@ serve(async (req) => {
           type: 'function',
           function: {
             name: 'submit_evaluation',
-            description: 'Submit the comprehensive IELTS speaking evaluation',
+            description: 'Submit the comprehensive IELTS speaking evaluation with model answers',
             parameters: {
               type: 'object',
               properties: {
@@ -160,11 +160,30 @@ serve(async (req) => {
                     required: ['partNumber', 'strengths', 'improvements']
                   }
                 },
+                modelAnswers: {
+                  type: 'array',
+                  description: 'Band 8+ model answers for key questions in each part',
+                  items: {
+                    type: 'object',
+                    properties: {
+                      partNumber: { type: 'number', description: 'Part 1, 2, or 3' },
+                      question: { type: 'string', description: 'The question being answered' },
+                      candidateResponse: { type: 'string', description: 'What the candidate said (summarized)' },
+                      modelAnswer: { type: 'string', description: 'A Band 8+ example response' },
+                      keyFeatures: { 
+                        type: 'array', 
+                        items: { type: 'string' },
+                        description: 'What makes this a Band 8+ answer'
+                      }
+                    },
+                    required: ['partNumber', 'question', 'modelAnswer', 'keyFeatures']
+                  }
+                },
                 summary: { type: 'string', description: 'Overall summary and advice' },
                 keyStrengths: { type: 'array', items: { type: 'string' } },
                 priorityImprovements: { type: 'array', items: { type: 'string' } }
               },
-              required: ['overallBand', 'fluencyCoherence', 'lexicalResource', 'grammaticalRange', 'pronunciation', 'summary']
+              required: ['overallBand', 'fluencyCoherence', 'lexicalResource', 'grammaticalRange', 'pronunciation', 'modelAnswers', 'summary']
             }
           }
         }],
@@ -268,7 +287,14 @@ function buildEvaluationPrompt(transcripts?: Record<number, string>, topic?: str
 3. Specific examples of strengths and errors
 4. Lexical upgrades for common vocabulary
 5. Word limit violations (if any ONE WORD questions were answered with phrases)
-6. Actionable improvement suggestions`;
+6. Actionable improvement suggestions
+7. MODEL ANSWERS: For 2-3 key questions from each part, provide Band 8+ example responses that demonstrate:
+   - Sophisticated vocabulary and collocations
+   - Complex grammatical structures
+   - Natural fluency and coherence
+   - Clear organization and development of ideas
+   
+   For each model answer, explain what makes it a Band 8+ response.`;
 
   return prompt;
 }
