@@ -1515,22 +1515,27 @@ OFFICIAL IELTS FORMAT - IMPORTANT:
 - The correct_answer is the LETTER (A, B, C, etc.) where that location is on the map
 - In the audio dialogue, describe locations by their RELATIVE POSITION to landmarks (e.g., "The museum is on the corner of Oak Street and Main Street" or "It's directly opposite the bank")
 
+CRITICAL: Answers must NOT be sequential! The correct answers should be RANDOMIZED across A-H, NOT following the pattern 1->A, 2->B, 3->C, etc.
+For example, Question 1 might be "F", Question 2 might be "C", Question 3 might be "H", etc.
+
 map_labels: These are the answer positions (A-H). Do NOT include the location name - the user must figure out which letter matches which location from the audio.
 landmarks: These are labeled reference points on the map that help navigation (streets, existing buildings with names visible).
 
 Return ONLY valid JSON (no markdown code blocks) in this exact format:
 {
-  "dialogue": "Guide: Welcome to the historic district. Let me show you around.\\nVisitor: Great, I'm interested in the craft shops.\\nGuide: Well, there's a wonderful quilt shop. It's on Ash Street, right next to the bank. You can't miss it - it's the building marked A on your map.\\nVisitor: And what about the museum?\\nGuide: The Handicrafts Museum is on Oak Street. It's directly opposite the cafe, that's position B on the map.\\nGuide: If you're looking for the school house, it's further down Main Street past the gift shop, at position C.",
+  "dialogue": "Guide: Welcome to the historic district. Let me show you around.\\nVisitor: Great, I'm interested in the craft shops.\\nGuide: Well, there's a wonderful quilt shop. It's further down Main Street, past the welcome center - that's position F on your map.\\nVisitor: And what about the museum?\\nGuide: The Handicrafts Museum is on Oak Street. It's directly opposite the bank, that's position C on the map.\\nGuide: If you're looking for the school house, it's at the far end of Elm Street, at position H.",
   "speaker_names": {"Guide": "Tour Guide", "Visitor": "Tourist"},
   "instruction": "Label the map. Choose the correct letter, A-H, for each label.",
   "map_description": "A street map with Oak Street at the top, Ash Street in the middle, and Elm Street at the bottom. Main Street runs vertically on the left, Maple Street on the right.",
   "map_labels": [
-    {"id": "A", "text": "Quilt Shop"},
-    {"id": "B", "text": "Handicrafts Museum"},
-    {"id": "C", "text": "School House"},
+    {"id": "A", "text": "Art Gallery"},
+    {"id": "B", "text": "Bookshop"},
+    {"id": "C", "text": "Handicrafts Museum"},
     {"id": "D", "text": "Antique Store"},
-    {"id": "E", "text": "Art Gallery"},
-    {"id": "F", "text": "Bookshop"}
+    {"id": "E", "text": "Pottery Shop"},
+    {"id": "F", "text": "Quilt Shop"},
+    {"id": "G", "text": "Tea House"},
+    {"id": "H", "text": "School House"}
   ],
   "landmarks": [
     {"id": "L1", "text": "Bank"},
@@ -1539,9 +1544,9 @@ Return ONLY valid JSON (no markdown code blocks) in this exact format:
     {"id": "L4", "text": "Welcome Center"}
   ],
   "questions": [
-    {"question_number": 1, "question_text": "Quilt Shop", "correct_answer": "A", "explanation": "Guide says it's next to the bank on Ash Street, position A"},
-    {"question_number": 2, "question_text": "Handicrafts Museum", "correct_answer": "B", "explanation": "Guide says it's opposite the cafe on Oak Street, position B"},
-    {"question_number": 3, "question_text": "School House", "correct_answer": "C", "explanation": "Guide says it's past the gift shop on Main Street, position C"}
+    {"question_number": 1, "question_text": "Quilt Shop", "correct_answer": "F", "explanation": "Guide says it's past the welcome center on Main Street, position F"},
+    {"question_number": 2, "question_text": "Handicrafts Museum", "correct_answer": "C", "explanation": "Guide says it's opposite the bank on Oak Street, position C"},
+    {"question_number": 3, "question_text": "School House", "correct_answer": "H", "explanation": "Guide says it's at the far end of Elm Street, position H"}
   ]
 }`;
 

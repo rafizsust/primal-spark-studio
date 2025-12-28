@@ -184,27 +184,33 @@ export function MapLabelingTable({
                     </div>
                   </td>
                   
-                  {/* Radio button cells for each letter - compact */}
-                  {letterColumns.map((letter) => (
-                    <td 
-                      key={letter} 
-                      className="border border-border px-1 py-1.5 text-center"
-                    >
-                      <label className="cursor-pointer flex items-center justify-center">
-                        <input
-                          type="radio"
-                          name={`map-q-${question.question_number}`}
-                          checked={selectedLetter === letter}
-                          onChange={() => handleSelectAnswer(question.question_number, letter)}
-                          className={cn(
-                            "w-4 h-4 cursor-pointer",
-                            "accent-primary",
-                            "focus:ring-2 focus:ring-ring"
-                          )}
-                        />
-                      </label>
-                    </td>
-                  ))}
+                  {/* Radio button cells for each letter - with persistent selection highlight */}
+                  {letterColumns.map((letter) => {
+                    const isSelected = selectedLetter === letter;
+                    return (
+                      <td 
+                        key={letter} 
+                        className={cn(
+                          "border border-border px-1 py-1.5 text-center cursor-pointer transition-colors",
+                          isSelected && "bg-sky-100 dark:bg-sky-900/40"
+                        )}
+                        onClick={() => handleSelectAnswer(question.question_number, letter)}
+                      >
+                        <label className="cursor-pointer flex items-center justify-center">
+                          <div className={cn(
+                            "w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all",
+                            isSelected 
+                              ? "border-teal-500 bg-white dark:bg-background" 
+                              : "border-muted-foreground/40 bg-white dark:bg-background"
+                          )}>
+                            {isSelected && (
+                              <div className="w-2.5 h-2.5 rounded-full bg-teal-500" />
+                            )}
+                          </div>
+                        </label>
+                      </td>
+                    );
+                  })}
                 </tr>
               );
             })}
