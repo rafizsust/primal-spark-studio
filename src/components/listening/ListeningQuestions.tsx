@@ -327,19 +327,37 @@ export function ListeningQuestions({
             )}
 
             {/* Conditional rendering for Table Completion */}
-            {group.question_type === 'TABLE_COMPLETION' && groupQuestions.length > 0 && (groupQuestions[0].table_data || group.options?.table_data) ? (
+            {group.question_type === 'TABLE_COMPLETION' && (groupQuestions.length > 0 || group.options?.table_data) && (groupQuestions[0]?.table_data || group.options?.table_data) ? (
               (() => {
                 // Check individual question table_data first, then fallback to group.options.table_data (AI practice)
-                const rawTableData = groupQuestions[0].table_data || group.options?.table_data;
-                // Handle both old array format and new object format
-                const tableRows = Array.isArray(rawTableData) ? rawTableData : rawTableData.rows;
-                const tableHeading = !Array.isArray(rawTableData) ? rawTableData.heading : undefined;
-                const tableHeadingAlignment = !Array.isArray(rawTableData) ? rawTableData.headingAlignment : undefined;
+                const rawTableData = groupQuestions[0]?.table_data || group.options?.table_data;
+                // Handle both old array format (from admin) and new object format, plus AI practice flat array format
+                let tableRows: any[];
+                let tableHeading: string | undefined;
+                let tableHeadingAlignment: 'left' | 'center' | 'right' | undefined;
+                
+                if (Array.isArray(rawTableData)) {
+                  // Direct array format - could be from AI practice or admin
+                  // AI practice format: array of arrays with objects like [{content: "...", is_header: true}, ...]
+                  tableRows = rawTableData;
+                  tableHeading = undefined;
+                  tableHeadingAlignment = undefined;
+                } else if (rawTableData?.rows) {
+                  // Object format with rows property
+                  tableRows = rawTableData.rows;
+                  tableHeading = rawTableData.heading;
+                  tableHeadingAlignment = rawTableData.headingAlignment;
+                } else {
+                  tableRows = [];
+                }
+                
+                // Skip rendering if no valid table data
+                if (!tableRows || tableRows.length === 0) return null;
                 
                 return (
                   <ListeningTableCompletion
                     testId={testId}
-                    questionId={groupQuestions[0].id}
+                    questionId={groupQuestions[0]?.id || group.id}
                     tableData={tableRows}
                     answers={answers}
                     onAnswerChange={onAnswerChange}

@@ -1991,7 +1991,8 @@ serve(async (req) => {
           start_question: 1,
           end_question: finalEndQuestion,
           options: groupOptions,
-          questions: questions.slice(0, 1), // For MCMA, only send ONE question object
+          // For MCMA, send only one question; for others (like MATCHING_CORRECT_LETTER), send all
+          questions: questionType === 'MULTIPLE_CHOICE_MULTIPLE' ? questions.slice(0, 1) : questions,
         }],
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
