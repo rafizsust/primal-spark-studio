@@ -166,13 +166,14 @@ export function ListeningQuestions({
         const groupQuestions = groupedQuestions[group.id] || [];
         const isActiveGroup = groupQuestions.some(q => q.question_number === currentQuestion);
 
-        // Calculate question range - for MCQ Multiple use num_sub_questions, for TABLE_COMPLETION use group range
+        // Calculate question range - for MCQ Multiple use max_answers (or end_question), for TABLE_COMPLETION use group range
         let questionRange: string;
         if (group.question_type === 'MULTIPLE_CHOICE_MULTIPLE') {
-          const numSubQuestions = group.num_sub_questions || 2;
+          // Use max_answers from group options, or calculate from end_question - start_question + 1
+          const maxAnswers = group.options?.max_answers || group.num_sub_questions || (group.end_question - group.start_question + 1);
           const startQ = group.start_question;
-          const endQ = startQ + numSubQuestions - 1;
-          questionRange = numSubQuestions > 1 ? `${startQ}-${endQ}` : `${startQ}`;
+          const endQ = startQ + maxAnswers - 1;
+          questionRange = maxAnswers > 1 ? `${startQ}-${endQ}` : `${startQ}`;
         } else if (group.question_type === 'TABLE_COMPLETION') {
           // TABLE_COMPLETION stores questions in table_data, so use group's start/end range
           questionRange = group.start_question === group.end_question 
@@ -351,11 +352,11 @@ export function ListeningQuestions({
               })()
             ) : group.question_type === 'MULTIPLE_CHOICE_MULTIPLE' ? (
               (() => {
-                // Calculate question range for MCQ Multiple based on num_sub_questions
-                const numSubQuestions = group.num_sub_questions || 2;
+                // Calculate question range for MCQ Multiple based on max_answers from group options
+                const maxAnswers = group.options?.max_answers || group.num_sub_questions || (group.end_question - group.start_question + 1);
                 const startQ = group.start_question;
-                const endQ = startQ + numSubQuestions - 1;
-                const mcqQuestionRange = numSubQuestions > 1 ? `${startQ}-${endQ}` : `${startQ}`;
+                const endQ = startQ + maxAnswers - 1;
+                const mcqQuestionRange = maxAnswers > 1 ? `${startQ}-${endQ}` : `${startQ}`;
                 
                 return (
                   <div
@@ -402,7 +403,7 @@ export function ListeningQuestions({
                           answer={answers[groupQuestions[0].question_number]}
                           onAnswerChange={(value) => onAnswerChange(groupQuestions[0].question_number, value)}
                           isActive={isActiveGroup}
-                          maxAnswers={group.num_sub_questions || 2} // Use num_sub_questions as maxAnswers
+                          maxAnswers={maxAnswers}
                         />
                       </div>
                     </div>

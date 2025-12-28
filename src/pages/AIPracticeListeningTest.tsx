@@ -315,37 +315,103 @@ export default function AIPracticeListeningTest() {
 
     const timeSpent = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
-    const questionResults: QuestionResult[] = questions.map(q => {
+    // Build question results with MCMA group handling (matching reading implementation)
+    const questionResults: QuestionResult[] = [];
+    const processedQuestionNumbers = new Set<number>();
+
+    // Process MCMA groups first (one result per group with partial scoring)
+    for (const group of questionGroups) {
+      if (group.question_type === 'MULTIPLE_CHOICE_MULTIPLE') {
+        const rangeNumbers: number[] = [];
+        for (let n = group.start_question; n <= group.end_question; n++) {
+          rangeNumbers.push(n);
+          processedQuestionNumbers.add(n);
+        }
+
+        // User's answer is stored on start_question only
+        const userAnswerRaw = answers[group.start_question]?.trim() || '';
+        const userLetters = userAnswerRaw
+          .split(',')
+          .map(s => s.trim().toUpperCase())
+          .filter(Boolean);
+
+        // Get correct answers from the saved test payload
+        const firstQFromTest = test.questionGroups?.flatMap(g => g.questions).find(
+          (oq) => oq.question_number === group.start_question
+        );
+        const correctAnswerRaw = firstQFromTest?.correct_answer || '';
+        const correctLetters = correctAnswerRaw
+          .split(',')
+          .map(s => s.trim().toUpperCase())
+          .filter(Boolean);
+
+        // Partial scoring: count how many user selections are correct
+        const correctSelections = userLetters.filter(l => correctLetters.includes(l));
+        const partialScore = correctSelections.length;
+        const maxScore = correctLetters.length;
+        const isFullyCorrect = partialScore === maxScore && userLetters.length === maxScore;
+
+        questionResults.push({
+          questionNumber: group.start_question,
+          questionNumbers: rangeNumbers,
+          userAnswer: userLetters.join(','),
+          correctAnswer: correctLetters.join(','),
+          isCorrect: isFullyCorrect,
+          partialScore,
+          maxScore,
+          explanation: firstQFromTest?.explanation || '',
+          questionType: 'MULTIPLE_CHOICE_MULTIPLE',
+        });
+      }
+    }
+
+    // Process remaining questions (non-MCMA)
+    for (const q of questions) {
+      if (processedQuestionNumbers.has(q.question_number)) continue;
+
       const userAnswer = answers[q.question_number]?.trim() || '';
       const correctAnswer =
         test.questionGroups?.flatMap(g => g.questions).find(
           (oq) => oq.question_number === q.question_number
         )?.correct_answer ?? q.correct_answer;
 
-      // Get question type for proper validation
-      const questionType = q.question_type || 
-        test.questionGroups?.find(g => 
+      const questionType = q.question_type ||
+        test.questionGroups?.find(g =>
           g.questions.some(gq => gq.question_number === q.question_number)
         )?.question_type;
 
-      // Use IELTS-aware answer checking with question type
       const isCorrect = checkAnswer(userAnswer, correctAnswer, questionType);
 
       const originalQ = test.questionGroups?.flatMap(g => g.questions).find(
         oq => oq.question_number === q.question_number
       );
 
-      return {
+      questionResults.push({
         questionNumber: q.question_number,
         userAnswer,
         correctAnswer,
         isCorrect,
         explanation: originalQ?.explanation || '',
-      };
-    });
+        questionType,
+      });
+    }
 
-    const score = questionResults.filter(r => r.isCorrect).length;
-    const total = questionResults.length;
+    // Sort by question number
+    questionResults.sort((a, b) => a.questionNumber - b.questionNumber);
+
+    // Calculate score: sum partial scores for MCMA, 1 for correct others
+    let score = 0;
+    let total = 0;
+    for (const r of questionResults) {
+      if (r.questionType === 'MULTIPLE_CHOICE_MULTIPLE' && r.maxScore !== undefined) {
+        score += r.partialScore || 0;
+        total += r.maxScore;
+      } else {
+        if (r.isCorrect) score += 1;
+        total += 1;
+      }
+    }
+
     const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
 
     const calculateBandScore = (pct: number): number => {
@@ -402,12 +468,39 @@ export default function AIPracticeListeningTest() {
   };
 
   const submitStats = useMemo(() => {
-    const totalCount = questions.length;
-    const answeredCount = Object.keys(answers).filter(k => 
-      answers[Number(k)]?.trim().length > 0
-    ).length;
+    // Calculate total based on question groups (MCMA counted as its range, others as 1)
+    let totalCount = 0;
+    let answeredCount = 0;
+    const processedQuestions = new Set<number>();
+
+    for (const group of questionGroups) {
+      if (group.question_type === 'MULTIPLE_CHOICE_MULTIPLE') {
+        const maxAnswers = group.options?.max_answers || (group.end_question - group.start_question + 1);
+        totalCount += maxAnswers;
+
+        // Answer stored on start_question as comma-separated
+        const answer = answers[group.start_question] || '';
+        const selectedCount = answer ? answer.split(',').filter(Boolean).length : 0;
+        answeredCount += selectedCount;
+
+        // Mark all question numbers in range as processed
+        for (let n = group.start_question; n <= group.end_question; n++) {
+          processedQuestions.add(n);
+        }
+      }
+    }
+
+    // Count non-MCMA questions
+    for (const q of questions) {
+      if (processedQuestions.has(q.question_number)) continue;
+      totalCount += 1;
+      if (answers[q.question_number]?.trim().length > 0) {
+        answeredCount += 1;
+      }
+    }
+
     return { totalCount, answeredCount };
-  }, [answers, questions]);
+  }, [answers, questions, questionGroups]);
 
   const currentPart = partRanges[activePartIndex];
 

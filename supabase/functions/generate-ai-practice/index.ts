@@ -1968,6 +1968,14 @@ serve(async (req) => {
         }
       }
 
+      // For MULTIPLE_CHOICE_MULTIPLE, end_question = start + max_answers - 1 (treat as ONE logical question with N selections)
+      // This matches the reading implementation where MCMA is counted as covering N question "slots"
+      let finalEndQuestion = questions.length;
+      if (questionType === 'MULTIPLE_CHOICE_MULTIPLE') {
+        const maxAnswers = groupOptions?.max_answers || Math.min(questionCount, 3);
+        finalEndQuestion = maxAnswers; // e.g., "Choose TWO" = questions 1-2
+      }
+
       return new Response(JSON.stringify({
         testId,
         topic,
@@ -1978,12 +1986,12 @@ serve(async (req) => {
         sampleRate: audio?.sampleRate || null,
         questionGroups: [{
           id: groupId,
-          instruction: parsed.instruction || `Questions 1-${questionCount}`,
+          instruction: parsed.instruction || `Questions 1-${finalEndQuestion}`,
           question_type: questionType,
           start_question: 1,
-          end_question: questions.length,
+          end_question: finalEndQuestion,
           options: groupOptions,
-          questions: questions,
+          questions: questions.slice(0, 1), // For MCMA, only send ONE question object
         }],
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
