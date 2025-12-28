@@ -1467,8 +1467,15 @@ Return ONLY valid JSON (no markdown code blocks) in this exact format:
 CRITICAL RULES:
 - You MUST provide EXACTLY ${dragOptionCount} drag_options (more options than questions - some are distractors).
 - Each question MUST include a drop zone indicated by 2+ consecutive underscores (e.g., "____").
+- CRITICAL: The blank (____) MUST appear in VARIED POSITIONS across questions:
+  * Some blanks at the BEGINNING of the sentence: "____ is responsible for marketing."
+  * Some blanks in the MIDDLE: "The manager needs to ____ before the meeting."
+  * Some blanks at the END: "John is in charge of ____."
+  * DO NOT put all blanks at the same position!
 - Use this exact pattern in question_text so the UI can render a drop box:
-  "<Item> ____ ." or "Drop answer ____ here." (must contain "____").
+  "____  is assigned to this department." (blank at START)
+  "The person handles ____ for the team." (blank in MIDDLE)
+  "<Item> ____ ." (blank at END)
 - The draggable options MUST be provided via drag_options.
 
 Return ONLY valid JSON (no markdown code blocks) in this exact format:
@@ -1478,19 +1485,23 @@ Return ONLY valid JSON (no markdown code blocks) in this exact format:
   "instruction": "Match each person to their responsibility. Drag the correct option to each box.",
   "drag_options": ["Managing budget", "Training staff", "Customer service", "Quality control", "Marketing", "Scheduling", "Research"],
   "questions": [
-    {"question_number": 1, "question_text": "John ____ .", "correct_answer": "Managing budget", "explanation": "John is responsible for budget"},
-    {"question_number": 2, "question_text": "Sarah ____ .", "correct_answer": "Training staff", "explanation": "Sarah handles training"}
+    {"question_number": 1, "question_text": "____ is John's main focus.", "correct_answer": "Managing budget", "explanation": "John is responsible for budget"},
+    {"question_number": 2, "question_text": "Sarah handles ____ for the team.", "correct_answer": "Training staff", "explanation": "Sarah handles training"},
+    {"question_number": 3, "question_text": "The reception desk manages ____.", "correct_answer": "Customer service", "explanation": "Reception handles customer service"}
   ]
 }`;
 
     case 'MAP_LABELING':
       return basePrompt + `2. Create a map labeling task with ${questionCount} locations to identify.
 
+IMPORTANT: The correct_answer for each question MUST be the location NAME (e.g., "Library"), NOT the letter (e.g., "A").
+The map_labels provide the letter-to-name mapping. Questions ask about locations and users drag location names to drop zones.
+
 Return ONLY valid JSON (no markdown code blocks) in this exact format:
 {
   "dialogue": "Speaker1: Let me show you around the campus...\\nSpeaker2: Great, where is everything?...",
   "speaker_names": {"Speaker1": "Campus Guide", "Speaker2": "New Student"},
-  "instruction": "Label the map below. Write the correct letter, A-F.",
+  "instruction": "Label the map below. Drag the correct location name to each numbered position.",
   "map_description": "A campus map showing: Library (A), Science Building (B), Sports Center (C), Cafeteria (D), Administration (E), Parking (F)",
   "map_labels": [
     {"id": "A", "text": "Library"},
@@ -1501,8 +1512,8 @@ Return ONLY valid JSON (no markdown code blocks) in this exact format:
     {"id": "F", "text": "Parking"}
   ],
   "questions": [
-    {"question_number": 1, "question_text": "Where can students borrow books?", "correct_answer": "A", "explanation": "The library is mentioned for books"},
-    {"question_number": 2, "question_text": "Where are sports facilities?", "correct_answer": "C", "explanation": "Sports Center has the facilities"}
+    {"question_number": 1, "question_text": "Where can students borrow books?", "correct_answer": "Library", "explanation": "The library is mentioned for books"},
+    {"question_number": 2, "question_text": "Where are sports facilities?", "correct_answer": "Sports Center", "explanation": "Sports Center has the facilities"}
   ]
 }`;
 
@@ -1890,15 +1901,15 @@ serve(async (req) => {
           map_labels: parsed.map_labels,
           imageUrl: mapImageUrl,
           // Add drop zones based on questions for visual placement
+          // MapLabeling component expects xPercent and yPercent (0-100)
           dropZones: (parsed.questions || []).map((q: any, idx: number) => ({
             id: `zone-${q.question_number || idx + 1}`,
             questionNumber: q.question_number || idx + 1,
-            x: 20 + (idx % 3) * 30, // Distribute across map
-            y: 20 + Math.floor(idx / 3) * 25,
-            width: 60,
-            height: 30,
+            xPercent: 15 + (idx % 3) * 30, // Distribute across map (15%, 45%, 75%)
+            yPercent: 20 + Math.floor(idx / 3) * 25, // Distribute vertically (20%, 45%, 70%)
           })),
-          options: parsed.map_labels?.map((l: any) => l.id) || [],
+          // Options should be the location names from map_labels for drag and drop
+          options: parsed.map_labels?.map((l: any) => l.text) || [],
         };
       } else if (questionType === 'NOTE_COMPLETION' && parsed.note_sections) {
         // Map note_sections to noteCategories format expected by NoteStyleFillInBlank

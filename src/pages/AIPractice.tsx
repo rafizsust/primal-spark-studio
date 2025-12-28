@@ -291,9 +291,13 @@ export default function AIPractice() {
 
       clearInterval(stepInterval);
 
-      if (error) throw error;
+      // Check for errors - handle both edge function errors and data.error
+      if (error) {
+        // Try to extract more specific error message from the response
+        throw error;
+      }
 
-      if (data.error) {
+      if (data?.error) {
         throw new Error(data.error);
       }
 
@@ -350,7 +354,15 @@ export default function AIPractice() {
       playErrorSound();
       
       // Parse error message for comprehensive user-friendly display
-      const rawMessage = err.message || '';
+      // Handle both string message and structured error from edge function
+      let rawMessage = '';
+      if (typeof err === 'object' && err !== null) {
+        // Try to get message from various error structures
+        rawMessage = err.message || err.error || (err.context?.body ? JSON.stringify(err.context.body) : '') || '';
+      } else {
+        rawMessage = String(err || '');
+      }
+      
       let errorTitle = 'Generation Failed';
       let errorMessage = 'Something went wrong. Please try again.';
       let solution = '';
@@ -358,9 +370,9 @@ export default function AIPractice() {
       
       // Handle common API errors with comprehensive user-friendly messages and solutions
       if (rawMessage.includes('quota') || rawMessage.includes('RESOURCE_EXHAUSTED') || rawMessage.includes('429') || rawMessage.includes('rate limit')) {
-        errorTitle = 'Usage Limit Reached';
-        errorMessage = 'Your AI API has reached its usage limit.';
-        solution = 'Wait 1-2 minutes and try again, or upgrade your Google AI Studio plan for higher limits.';
+        errorTitle = 'API Quota Exceeded';
+        errorMessage = 'Your Gemini API has reached its usage limit.';
+        solution = 'Wait a few minutes and try again, or upgrade your Google AI Studio plan.';
         showSettingsLink = true;
       } else if (rawMessage.includes('PERMISSION_DENIED') || rawMessage.includes('403') || rawMessage.includes('access denied')) {
         errorTitle = 'Access Denied';
@@ -382,14 +394,23 @@ export default function AIPractice() {
         showSettingsLink = true;
       } else if (rawMessage.includes('Audio generation failed') || rawMessage.includes('TTS')) {
         errorTitle = 'Audio Generation Failed';
-        errorMessage = 'Could not generate audio for the listening test.';
-        if (rawMessage.includes('rate limit') || rawMessage.includes('quota')) {
-          solution = 'Your API has reached its audio generation limit. Wait a few minutes or upgrade your plan.';
+        // Extract the actual reason from the error message
+        const quotaMatch = rawMessage.match(/API quota exceeded[^.]*\./i);
+        const permissionMatch = rawMessage.match(/permission[^.]*\./i);
+        if (quotaMatch) {
+          errorMessage = quotaMatch[0];
+          solution = 'Wait a few minutes and try again, or upgrade your Google AI Studio plan.';
           showSettingsLink = true;
-        } else if (rawMessage.includes('permissions')) {
+        } else if (rawMessage.includes('rate limit') || rawMessage.includes('quota')) {
+          errorMessage = 'Your API has reached its audio generation limit.';
+          solution = 'Wait a few minutes or upgrade your plan.';
+          showSettingsLink = true;
+        } else if (permissionMatch || rawMessage.includes('permissions')) {
+          errorMessage = 'Text-to-Speech is not enabled for your API key.';
           solution = 'Enable Text-to-Speech in your Google AI Studio API settings.';
           showSettingsLink = true;
         } else {
+          errorMessage = 'Could not generate audio for the listening test.';
           solution = 'Wait a moment and try again. If the issue persists, try reducing the audio duration.';
         }
       } else if (rawMessage.includes('parse') || rawMessage.includes('JSON')) {
