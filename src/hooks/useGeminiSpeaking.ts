@@ -31,6 +31,7 @@ export function useGeminiSpeaking(config: GeminiSpeakingConfig) {
   const pendingUserInputRef = useRef<string>('');
   const silenceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const isConnectedRef = useRef(false); // Track connection state synchronously
+  const disconnectRef = useRef<(() => void) | null>(null);
 
   // Speech Recognition (STT)
   const recognition = useSpeechRecognition({
@@ -299,12 +300,17 @@ export function useGeminiSpeaking(config: GeminiSpeakingConfig) {
     }
   }, [synthesis]);
 
-  // Cleanup on unmount
+  // Keep latest disconnect for unmount cleanup without disconnecting on every re-render
+  useEffect(() => {
+    disconnectRef.current = disconnect;
+  }, [disconnect]);
+
+  // Cleanup on unmount only
   useEffect(() => {
     return () => {
-      disconnect();
+      disconnectRef.current?.();
     };
-  }, [disconnect]);
+  }, []);
 
   return {
     // Connection state
