@@ -26,7 +26,8 @@ import {
   Brain,
   Settings2,
   PenTool,
-  Mic
+  Mic,
+  Volume2
 } from 'lucide-react';
 import { 
   PracticeModule, 
@@ -80,6 +81,16 @@ const SPEAKING_PART_TYPES: { value: SpeakingPartType; label: string; description
   { value: 'PART_1', label: 'Part 1 Only', description: 'Introduction and interview' },
   { value: 'PART_2', label: 'Part 2 Only', description: 'Individual long turn with cue card' },
   { value: 'PART_3', label: 'Part 3 Only', description: 'Discussion and abstract topics' },
+];
+
+// Gemini Live API HD Voices (British/neutral accents for IELTS examiner)
+const SPEAKING_EXAMINER_VOICES: { value: string; label: string; description: string }[] = [
+  { value: 'Puck', label: 'Puck (Upbeat)', description: 'Neutral British, professional and encouraging' },
+  { value: 'Charon', label: 'Charon (Informative)', description: 'Clear, measured British accent' },
+  { value: 'Kore', label: 'Kore (Firm)', description: 'Professional female examiner voice' },
+  { value: 'Aoede', label: 'Aoede (Breezy)', description: 'Friendly, relaxed British female' },
+  { value: 'Fenrir', label: 'Fenrir (Excitable)', description: 'Energetic male examiner' },
+  { value: 'Leda', label: 'Leda (Youthful)', description: 'Young, clear female voice' },
 ];
 
 const DIFFICULTY_OPTIONS: { value: DifficultyLevel; label: string; color: string }[] = [
@@ -181,6 +192,9 @@ export default function AIPractice() {
   
   // Monologue mode for Fill-in-Blank (single speaker like IELTS Part 4)
   const [monologueModeEnabled, setMonologueModeEnabled] = useState(false);
+  
+  // Speaking-specific: examiner voice selection
+  const [speakingExaminerVoice, setSpeakingExaminerVoice] = useState('Puck');
 
   // Speaker configuration
   const [speaker1Config, setSpeaker1Config] = useState<SpeakerConfig>({
@@ -1053,13 +1067,14 @@ export default function AIPractice() {
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <Mic className="w-5 h-5 text-primary" />
-                    Speaking Practice Configuration
+                    AI Speaking Practice Configuration
                   </CardTitle>
                   <CardDescription>
-                    Practice with AI examiner - questions read aloud, you record responses
+                    Live conversation with AI examiner using Gemini Live Audio
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Test Parts */}
                   <div className="space-y-3">
                     <Label className="text-base font-medium">Test Parts</Label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -1077,6 +1092,49 @@ export default function AIPractice() {
                           <div className="text-sm text-muted-foreground">{type.description}</div>
                         </button>
                       ))}
+                    </div>
+                  </div>
+
+                  {/* Examiner Voice Selection */}
+                  <div className="space-y-4 border-t pt-6">
+                    <Label className="text-base font-medium flex items-center gap-2">
+                      <Volume2 className="w-4 h-4" />
+                      Examiner Voice
+                    </Label>
+                    <p className="text-sm text-muted-foreground">
+                      Select the AI examiner's voice personality for your speaking test
+                    </p>
+                    
+                    <RadioGroup
+                      value={speakingExaminerVoice}
+                      onValueChange={(v) => setSpeakingExaminerVoice(v)}
+                      className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                    >
+                      {SPEAKING_EXAMINER_VOICES.map((voice) => (
+                        <div key={voice.value} className="flex items-center space-x-2">
+                          <RadioGroupItem value={voice.value} id={voice.value} />
+                          <Label htmlFor={voice.value} className="flex-1 cursor-pointer">
+                            <div className="font-medium">{voice.label}</div>
+                            <div className="text-xs text-muted-foreground">{voice.description}</div>
+                          </Label>
+                        </div>
+                      ))}
+                    </RadioGroup>
+                  </div>
+
+                  {/* Difficulty affects question complexity */}
+                  <div className="p-4 rounded-lg bg-muted/50 border">
+                    <div className="flex items-start gap-3">
+                      <Brain className="w-5 h-5 text-primary mt-0.5" />
+                      <div>
+                        <div className="font-medium text-sm">Difficulty-based Question Complexity</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {difficulty === 'easy' && 'Simple, familiar topics with straightforward questions'}
+                          {difficulty === 'medium' && 'Standard IELTS topics with moderately complex follow-ups'}
+                          {difficulty === 'hard' && 'Abstract topics requiring sophisticated vocabulary and analysis'}
+                          {difficulty === 'expert' && 'Highly abstract, philosophical questions demanding band 8+ responses'}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </CardContent>

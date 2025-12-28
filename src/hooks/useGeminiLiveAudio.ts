@@ -5,6 +5,7 @@ interface GeminiLiveConfig {
   partType: 'PART_1' | 'PART_2' | 'PART_3' | 'FULL_TEST';
   difficulty: string;
   topic?: string;
+  voiceName?: string;
   onAudioReceived?: (audioData: ArrayBuffer) => void;
   onTranscriptReceived?: (text: string, isFinal: boolean) => void;
   onError?: (error: Error) => void;
@@ -161,7 +162,8 @@ export function useGeminiLiveAudio(config: GeminiLiveConfig) {
         body: {
           partType: config.partType,
           difficulty: config.difficulty,
-          topic: config.topic
+          topic: config.topic,
+          voiceName: config.voiceName
         }
       });
 

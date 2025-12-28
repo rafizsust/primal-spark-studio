@@ -17,10 +17,14 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    const { partType, difficulty, topic } = await req.json();
+    const { partType, difficulty, topic, voiceName } = await req.json();
 
     // Build system instruction for IELTS examiner with British accent personality
     const examinerInstruction = buildExaminerInstruction(partType, difficulty, topic);
+
+    // Validate voice selection (default to Puck if invalid)
+    const validVoices = ['Puck', 'Charon', 'Kore', 'Aoede', 'Fenrir', 'Leda', 'Zephyr', 'Iapetus', 'Orus'];
+    const selectedVoice = validVoices.includes(voiceName) ? voiceName : 'Puck';
 
     // For Gemini Live API, we need to get the session config
     // The client will connect directly to the WebSocket with this config
@@ -31,7 +35,7 @@ serve(async (req) => {
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {
-              voiceName: 'Puck' // British-sounding, neutral professional voice
+              voiceName: selectedVoice
             }
           }
         }

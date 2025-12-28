@@ -369,7 +369,7 @@ export default function AIPracticeSpeakingTest() {
         description: 'Your speaking test is being evaluated'
       });
 
-      navigate(`/ai-practice/results/${testId}`);
+      navigate(`/ai-practice/speaking/results/${testId}`);
     } catch (err) {
       console.error('Submission error:', err);
       toast({
