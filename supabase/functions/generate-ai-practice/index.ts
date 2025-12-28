@@ -1431,19 +1431,31 @@ Return ONLY valid JSON (no markdown code blocks) in this exact format:
     case 'FLOWCHART_COMPLETION':
       return basePrompt + `2. Create a flowchart completion task about a process with ${questionCount} blanks.
 
+CRITICAL FORMAT RULES:
+- Each flowchart step with a blank MUST have "text" containing "__X__" where X is the question number
+- Example: "Excess energy is (1) __1__ in the BESS" - the __1__ creates the drop zone
+- Steps without blanks just have plain text
+- DO NOT put blanks at the end of sentences only - vary positions (start, middle, end)
+- Include some distractor options that are NOT correct answers
+
 Return ONLY valid JSON (no markdown code blocks) in this exact format:
 {
   "dialogue": "Speaker1: Let me explain the process...\\nSpeaker2: Please go ahead...",
   "speaker_names": {"Speaker1": "HR Manager", "Speaker2": "Applicant"},
-  "instruction": "Complete the flow chart below. Write NO MORE THAN TWO WORDS for each answer.",
+  "instruction": "Complete the flow chart below. Choose the correct answer and drag it into the gap.",
   "flowchart_title": "Process of Application",
   "flowchart_steps": [
-    {"id": "step1", "label": "Submit form online", "isBlank": false},
-    {"id": "step2", "label": "", "isBlank": true, "questionNumber": 1},
-    {"id": "step3", "label": "Attend interview", "isBlank": false}
+    {"id": "step1", "text": "Submit application form online", "hasBlank": false},
+    {"id": "step2", "text": "System sends __1__ to applicant", "hasBlank": true, "blankNumber": 1},
+    {"id": "step3", "text": "Applicant pays the __2__ fee", "hasBlank": true, "blankNumber": 2},
+    {"id": "step4", "text": "Attend interview session", "hasBlank": false},
+    {"id": "step5", "text": "Wait for __3__ from HR", "hasBlank": true, "blankNumber": 3}
   ],
+  "distractor_options": ["schedule", "discount"],
   "questions": [
-    {"question_number": 1, "question_text": "Step 2", "correct_answer": "pay fee", "explanation": "Speaker mentions paying the fee after submission"}
+    {"question_number": 1, "question_text": "Step 2", "correct_answer": "confirmation", "explanation": "System sends confirmation email"},
+    {"question_number": 2, "question_text": "Step 3", "correct_answer": "registration", "explanation": "Applicant pays registration fee"},
+    {"question_number": 3, "question_text": "Step 5", "correct_answer": "decision", "explanation": "Wait for final decision from HR"}
   ]
 }`;
 
@@ -1836,34 +1848,25 @@ serve(async (req) => {
           text: step.label || step.text || '',
           hasBlank: step.isBlank || step.hasBlank || false,
           blankNumber: step.questionNumber || step.blankNumber,
-          alignment: step.alignment || 'center',
+          alignment: step.alignment || 'left',
         }));
+        
         // Component also needs options array for drag-and-drop
         // Extract correct answers as the option pool + add distractors
         const correctAnswers = parsed.questions?.map((q: any) => q.correct_answer) || [];
-        const distractors = ['Other option', 'Alternative choice']; // fallback distractors
-        const flowchartOptions = [...new Set([...correctAnswers, ...distractors])];
+        // Use AI-generated distractors if available, otherwise use generic fallbacks
+        const distractors = parsed.distractor_options || ['Other option', 'Alternative choice'];
+        const allOptions = [...new Set([...correctAnswers, ...distractors])];
         
-        // Generate flowchart image using Lovable AI
-        let flowchartImageUrl: string | undefined;
-        console.log('Generating flowchart image for FLOWCHART_COMPLETION...');
-        const flowchartImageData = await generateFlowchartImage(
-          parsed.flowchart_title || 'Process Flowchart',
-          parsed.flowchart_steps
-        );
-        if (flowchartImageData) {
-          const uploadedUrl = await uploadGeneratedImage(supabaseClient, flowchartImageData, testId, 'ai-practice-flowcharts');
-          if (uploadedUrl) {
-            flowchartImageUrl = uploadedUrl;
-          }
-        }
+        // CRITICAL: Shuffle the options so they're not in order matching questions
+        const shuffledOptions = [...allOptions].sort(() => Math.random() - 0.5);
         
+        // Note: We don't generate flowchart image for listening - the interactive component renders it
         groupOptions = {
           title: parsed.flowchart_title,
           steps,
-          options: flowchartOptions,
+          options: shuffledOptions,
           option_format: 'A',
-          imageUrl: flowchartImageUrl,
         };
       } else if (questionType === 'DRAG_AND_DROP_OPTIONS') {
         // UI expects group.options.options (array of strings) + option_format

@@ -159,16 +159,19 @@ export function FlowchartCompletion({
     }
   };
 
-  // Parse step text to extract blanks
+  // Parse step text to extract blanks and clean up formatting
   const parseStepText = (text: string, step: FlowchartStep) => {
+    // First, strip parenthesized question numbers like "(1)", "(2)" etc. - they shouldn't display
+    let cleanedText = text.replace(/\s*\(\d+\)\s*/g, ' ').trim();
+    
     const blankRegex = /_{2,}\d*_{0,}/g;
     const parts: (string | { type: 'blank'; number: number })[] = [];
     let lastIndex = 0;
     let match;
 
-    while ((match = blankRegex.exec(text)) !== null) {
+    while ((match = blankRegex.exec(cleanedText)) !== null) {
       if (match.index > lastIndex) {
-        parts.push(text.substring(lastIndex, match.index));
+        parts.push(cleanedText.substring(lastIndex, match.index).trim());
       }
       const numMatch = match[0].match(/\d+/);
       const blankNum = numMatch ? parseInt(numMatch[0]) : step.blankNumber || 1;
@@ -176,11 +179,13 @@ export function FlowchartCompletion({
       lastIndex = match.index + match[0].length;
     }
 
-    if (lastIndex < text.length) {
-      parts.push(text.substring(lastIndex));
+    if (lastIndex < cleanedText.length) {
+      parts.push(cleanedText.substring(lastIndex).trim());
     }
 
-    return parts.length > 0 ? parts : [text];
+    // Filter out empty string parts
+    const filteredParts = parts.filter(p => p !== '');
+    return filteredParts.length > 0 ? filteredParts : [cleanedText];
   };
 
   // Get alignment class

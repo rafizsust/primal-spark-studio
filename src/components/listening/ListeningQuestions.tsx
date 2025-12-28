@@ -443,16 +443,7 @@ export function ListeningQuestions({
               />
             ) : group.question_type === 'FLOWCHART_COMPLETION' ? (
               <div className="space-y-4">
-                {/* Show generated flowchart image if available */}
-                {group.options?.imageUrl && (
-                  <div className="mb-4">
-                    <img 
-                      src={group.options.imageUrl} 
-                      alt={group.options?.title || 'Flowchart diagram'}
-                      className="max-w-full h-auto rounded-lg border border-border"
-                    />
-                  </div>
-                )}
+                {/* Note: We don't display flowchart image for listening - the interactive component renders the flowchart */}
                 <FlowchartCompletion
                   testId={testId}
                   groupId={group.id}
