@@ -1042,6 +1042,9 @@ export default function AIPracticeSpeakingTest() {
                     <div className="text-center py-8">
                       <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-primary" />
                       <p className="text-muted-foreground">Preparing examiner audio…</p>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        This may take 1-2 minutes due to API rate limits
+                      </p>
                     </div>
                   )}
 

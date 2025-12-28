@@ -33,47 +33,69 @@ async function decryptApiKey(encryptedValue: string, encryptionKey: string): Pro
   return decoder.decode(decryptedData);
 }
 
+// Helper to sleep for specified ms
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function generateTtsPcmBase64({
   apiKey,
   text,
   voiceName,
+  maxRetries = 3,
 }: {
   apiKey: string;
   text: string;
   voiceName: string;
+  maxRetries?: number;
 }): Promise<string> {
   const prompt = `You are an IELTS Speaking examiner with a neutral British accent.\n\nRead aloud EXACTLY the following text. Do not add, remove, or paraphrase anything. Use natural pacing and clear pronunciation.\n\n"""\n${text}\n"""`;
 
-  const resp = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName },
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName },
+              },
             },
           },
-        },
-      }),
-    }
-  );
+        }),
+      }
+    );
 
-  if (!resp.ok) {
+    if (resp.ok) {
+      const data = await resp.json();
+      const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data as string | undefined;
+      if (!audioData) throw new Error("No audio returned from Gemini TTS");
+      return audioData;
+    }
+
+    // Handle rate limiting (429)
+    if (resp.status === 429) {
+      const retryAfter = parseInt(resp.headers.get("Retry-After") || "0", 10);
+      const waitTime = retryAfter > 0 ? retryAfter * 1000 : Math.min(20000 * Math.pow(2, attempt), 60000);
+      console.log(`Rate limited (attempt ${attempt + 1}/${maxRetries + 1}), waiting ${waitTime}ms...`);
+      
+      if (attempt < maxRetries) {
+        await sleep(waitTime);
+        continue;
+      }
+    }
+
     const t = await resp.text();
     console.error("Gemini TTS error:", resp.status, t);
     throw new Error(`Gemini TTS failed (${resp.status})`);
   }
 
-  const data = await resp.json();
-  const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data as string | undefined;
-  if (!audioData) throw new Error("No audio returned from Gemini TTS");
-
-  return audioData;
+  throw new Error("Gemini TTS failed after max retries");
 }
 
 serve(async (req) => {
@@ -138,10 +160,35 @@ serve(async (req) => {
 
     const clips: Array<{ key: string; text: string; audioBase64: string; sampleRate: number }> = [];
 
-    for (const item of items) {
+    // Process items with delay between calls to respect rate limits
+    // Free tier: 3 req/min. Retry-After suggests ~12s wait, we use 15s to be safe.
+    const DELAY_BETWEEN_CALLS_MS = 15000;
+    
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       if (!item?.key || !item?.text) continue;
-      const audioBase64 = await generateTtsPcmBase64({ apiKey: geminiApiKey, text: item.text, voiceName: resolvedVoice });
-      clips.push({ key: item.key, text: item.text, audioBase64, sampleRate: 24000 });
+      
+      // Add delay before each call except the first one
+      if (i > 0) {
+        console.log(`Waiting ${DELAY_BETWEEN_CALLS_MS}ms before TTS call ${i + 1}/${items.length}...`);
+        await sleep(DELAY_BETWEEN_CALLS_MS);
+      }
+      
+      try {
+        const audioBase64 = await generateTtsPcmBase64({ apiKey: geminiApiKey, text: item.text, voiceName: resolvedVoice });
+        clips.push({ key: item.key, text: item.text, audioBase64, sampleRate: 24000 });
+        console.log(`Generated clip ${i + 1}/${items.length}: ${item.key}`);
+      } catch (err) {
+        console.error(`Failed to generate clip ${item.key}:`, err);
+        // Continue with other clips instead of failing entirely
+      }
+    }
+
+    if (clips.length === 0) {
+      return new Response(JSON.stringify({ error: "Failed to generate any audio clips" }), {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     return new Response(JSON.stringify({ success: true, clips }), {
