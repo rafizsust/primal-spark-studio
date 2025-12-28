@@ -252,25 +252,9 @@ export function ListeningQuestions({
               </div>
             )}
 
-            {/* Map Labeling - Drag & Drop on Image */}
-            {group.question_type === 'MAP_LABELING' && group.options?.imageUrl && (
-              <div className="mb-6">
-                <MapLabeling
-                  imageUrl={group.options.imageUrl}
-                  dropZones={group.options.dropZones || []}
-                  options={group.options.options || []}
-                  answers={answers}
-                  onAnswerChange={onAnswerChange}
-                  onQuestionFocus={setCurrentQuestion}
-                  maxImageWidth={group.options.maxImageWidth}
-                  maxImageHeight={group.options.maxImageHeight}
-                  fontSize={fontSize}
-                />
-              </div>
-            )}
-
             {/* Map Labeling - Table-based UI for AI practice (official IELTS format) */}
-            {group.question_type === 'MAP_LABELING' && !group.options?.imageUrl && group.options?.map_labels && (
+            {/* Uses MapLabelingTable when map_labels exist (AI-generated tests) */}
+            {group.question_type === 'MAP_LABELING' && group.options?.map_labels && (
               <div className="mb-6">
                 <MapLabelingTable
                   mapDescription={group.options.map_description}
@@ -285,6 +269,23 @@ export function ListeningQuestions({
                   onQuestionFocus={setCurrentQuestion}
                   fontSize={fontSize}
                   imageUrl={group.options.imageUrl}
+                />
+              </div>
+            )}
+
+            {/* Map Labeling - Drag & Drop on Image (admin-created tests without map_labels) */}
+            {group.question_type === 'MAP_LABELING' && group.options?.imageUrl && !group.options?.map_labels && (
+              <div className="mb-6">
+                <MapLabeling
+                  imageUrl={group.options.imageUrl}
+                  dropZones={group.options.dropZones || []}
+                  options={group.options.options || []}
+                  answers={answers}
+                  onAnswerChange={onAnswerChange}
+                  onQuestionFocus={setCurrentQuestion}
+                  maxImageWidth={group.options.maxImageWidth}
+                  maxImageHeight={group.options.maxImageHeight}
+                  fontSize={fontSize}
                 />
               </div>
             )}
