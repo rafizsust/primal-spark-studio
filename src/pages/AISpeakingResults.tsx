@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Lightbulb,
+  Play,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -608,10 +609,28 @@ export default function AISpeakingResults() {
                 Back to AI Practice
               </Link>
             </Button>
+            {report.modelAnswers && report.modelAnswers.length > 0 && (
+              <Button 
+                variant="secondary"
+                onClick={() => {
+                  // Store practice data for re-attempt
+                  const practiceData = {
+                    testId: result.test_id,
+                    modelAnswers: report.modelAnswers,
+                    topic: report.examiner_notes || 'Speaking Practice'
+                  };
+                  sessionStorage.setItem('speaking_practice_mode', JSON.stringify(practiceData));
+                  navigate(`/ai-practice/speaking/${result.test_id}?mode=practice`);
+                }}
+              >
+                <Play className="w-4 h-4 mr-2" />
+                Practice These Questions
+              </Button>
+            )}
             <Button asChild>
               <Link to="/ai-practice">
                 <RotateCcw className="w-4 h-4 mr-2" />
-                Practice Again
+                New Test
               </Link>
             </Button>
           </div>

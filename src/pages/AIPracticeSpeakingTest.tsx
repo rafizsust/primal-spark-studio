@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -14,16 +14,28 @@ import { supabase } from '@/integrations/supabase/client';
 import { 
   Clock, 
   Mic, 
-  MicOff, 
+  MicOff,
   ArrowRight, 
   Send, 
   Volume2,
   VolumeX,
   AlertCircle,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Sparkles,
+  Eye,
+  EyeOff,
+  RotateCcw,
+  Lightbulb
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+
+interface PracticeModelAnswer {
+  partNumber: number;
+  question: string;
+  modelAnswer: string;
+  keyFeatures: string[];
+}
 
 // IELTS Official Timings
 const PART_TIMINGS = {
@@ -55,12 +67,19 @@ interface PartRecording {
 
 export default function AIPracticeSpeakingTest() {
   const { testId } = useParams<{ testId: string }>();
+  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const { toast } = useToast();
   
   const [test, setTest] = useState<GeneratedTest | null>(null);
   const [loading, setLoading] = useState(true);
   const [showStartOverlay, setShowStartOverlay] = useState(true);
+  
+  // Practice mode state
+  const isPracticeMode = searchParams.get('mode') === 'practice';
+  const [practiceModelAnswers, setPracticeModelAnswers] = useState<PracticeModelAnswer[]>([]);
+  const [showModelAnswer, setShowModelAnswer] = useState(false);
+  const [currentPracticeIndex, setCurrentPracticeIndex] = useState(0);
   
   // Test state
   const [phase, setPhase] = useState<TestPhase>('connecting');
@@ -104,7 +123,7 @@ export default function AIPracticeSpeakingTest() {
     }
   });
 
-  // Load test data
+  // Load test data and practice mode data
   useEffect(() => {
     async function loadTest() {
       if (!testId) {
@@ -120,11 +139,27 @@ export default function AIPracticeSpeakingTest() {
       }
       
       setTest(loadedTest);
+      
+      // Load practice mode data if available
+      if (isPracticeMode) {
+        const practiceDataStr = sessionStorage.getItem('speaking_practice_mode');
+        if (practiceDataStr) {
+          try {
+            const practiceData = JSON.parse(practiceDataStr);
+            if (practiceData.modelAnswers && Array.isArray(practiceData.modelAnswers)) {
+              setPracticeModelAnswers(practiceData.modelAnswers);
+            }
+          } catch (e) {
+            console.error('Failed to parse practice data:', e);
+          }
+        }
+      }
+      
       setLoading(false);
     }
     
     loadTest();
-  }, [testId, navigate, toast]);
+  }, [testId, navigate, toast, isPracticeMode]);
 
   // Timer effect
   useEffect(() => {
@@ -424,7 +459,36 @@ export default function AIPracticeSpeakingTest() {
     );
   }
 
-  // Start overlay
+  // Practice mode start overlay
+  if (showStartOverlay && isPracticeMode) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="max-w-lg w-full">
+          <CardContent className="py-8 text-center space-y-6">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary">
+              <Sparkles className="w-4 h-4" />
+              <span className="text-sm font-medium">Practice Mode</span>
+            </div>
+            <h2 className="text-2xl font-bold">Practice These Questions</h2>
+            <p className="text-muted-foreground">
+              Practice answering {practiceModelAnswers.length} questions from your previous test. 
+              You can reveal the model answer after attempting each question.
+            </p>
+            <div className="flex flex-col gap-3">
+              <Button onClick={() => setShowStartOverlay(false)} size="lg">
+                Start Practice
+              </Button>
+              <Button variant="outline" onClick={() => navigate(`/ai-practice/speaking/results/${testId}`)}>
+                Back to Results
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // Standard start overlay
   if (showStartOverlay) {
     return (
       <TestStartOverlay
@@ -437,6 +501,151 @@ export default function AIPracticeSpeakingTest() {
         onStart={handleStartTest}
         onCancel={() => navigate('/ai-practice')}
       />
+    );
+  }
+
+  // Practice mode UI
+  if (isPracticeMode && practiceModelAnswers.length > 0) {
+    const currentQuestion = practiceModelAnswers[currentPracticeIndex];
+    
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        {/* Practice mode header */}
+        <header className="sticky top-0 z-50 bg-background/95 backdrop-blur border-b px-4 py-3">
+          <div className="container max-w-3xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Badge className="bg-primary/20 text-primary">
+                <Sparkles className="w-3 h-3 mr-1" />
+                Practice Mode
+              </Badge>
+              <Badge variant="outline">
+                Question {currentPracticeIndex + 1} of {practiceModelAnswers.length}
+              </Badge>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => navigate(`/ai-practice/speaking/results/${testId}`)}
+            >
+              Exit Practice
+            </Button>
+          </div>
+        </header>
+
+        <main className="flex-1 flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl space-y-6">
+            {/* Question Card */}
+            <Card>
+              <CardContent className="py-6 space-y-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Badge variant="outline">Part {currentQuestion.partNumber}</Badge>
+                </div>
+                
+                <h3 className="text-xl font-semibold">{currentQuestion.question}</h3>
+                
+                <p className="text-muted-foreground text-sm">
+                  Try answering this question out loud, then reveal the model answer to compare.
+                </p>
+              </CardContent>
+            </Card>
+
+            {/* Model Answer Section */}
+            <Card className={cn(
+              "transition-all duration-300",
+              showModelAnswer ? "bg-success/5 border-success/20" : ""
+            )}>
+              <CardContent className="py-6">
+                {showModelAnswer ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center gap-2 text-success">
+                      <CheckCircle2 className="w-5 h-5" />
+                      <span className="font-medium">Band 8+ Model Answer</span>
+                    </div>
+                    
+                    <p className="text-foreground leading-relaxed">
+                      {currentQuestion.modelAnswer}
+                    </p>
+
+                    {currentQuestion.keyFeatures && currentQuestion.keyFeatures.length > 0 && (
+                      <div className="mt-4 p-4 bg-primary/5 rounded-lg">
+                        <div className="flex items-center gap-2 text-primary text-sm font-medium mb-2">
+                          <Lightbulb className="w-4 h-4" />
+                          Why this works:
+                        </div>
+                        <ul className="space-y-1">
+                          {currentQuestion.keyFeatures.map((feature, i) => (
+                            <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
+                              <CheckCircle2 className="w-3 h-3 text-success flex-shrink-0 mt-1" />
+                              {feature}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => setShowModelAnswer(true)}
+                  >
+                    <Eye className="w-4 h-4 mr-2" />
+                    Reveal Model Answer
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Navigation */}
+            <div className="flex justify-between gap-4">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowModelAnswer(false);
+                  setCurrentPracticeIndex(prev => Math.max(0, prev - 1));
+                }}
+                disabled={currentPracticeIndex === 0}
+              >
+                Previous
+              </Button>
+              
+              <div className="flex gap-2">
+                {showModelAnswer && (
+                  <Button
+                    variant="ghost"
+                    onClick={() => setShowModelAnswer(false)}
+                  >
+                    <EyeOff className="w-4 h-4 mr-2" />
+                    Hide Answer
+                  </Button>
+                )}
+                
+                {currentPracticeIndex < practiceModelAnswers.length - 1 ? (
+                  <Button
+                    onClick={() => {
+                      setShowModelAnswer(false);
+                      setCurrentPracticeIndex(prev => prev + 1);
+                    }}
+                  >
+                    Next Question
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={() => {
+                      sessionStorage.removeItem('speaking_practice_mode');
+                      navigate(`/ai-practice/speaking/results/${testId}`);
+                    }}
+                  >
+                    <RotateCcw className="w-4 h-4 mr-2" />
+                    Back to Results
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
     );
   }
 
