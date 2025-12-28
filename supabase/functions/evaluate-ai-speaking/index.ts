@@ -218,7 +218,7 @@ serve(async (req) => {
       test_id: testId,
       module: 'speaking',
       answers: transcripts || {},
-      score: Math.round((evaluation.overallBand / 9) * 100),
+      score: Math.round(((evaluation.overall_band ?? evaluation.overallBand ?? 5) / 9) * 100),
       total_questions: partAudios.length,
       band_score: evaluation.overallBand,
       time_spent_seconds: Math.round(partAudios.reduce((acc, p) => acc + p.duration, 0)),
@@ -256,54 +256,92 @@ function parseEvaluationResponse(responseText: string): any {
     // Try to extract JSON from the response
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      return JSON.parse(jsonMatch[0]);
+      const parsed = JSON.parse(jsonMatch[0]);
+      // Normalize to snake_case format expected by the frontend
+      return normalizeEvaluationResponse(parsed);
     }
     
-    // If no JSON found, try to parse structured data
-    const evaluation: any = {
-      overallBand: 0,
-      fluencyCoherence: { score: 0, feedback: '', examples: [] },
-      lexicalResource: { score: 0, feedback: '', examples: [], lexicalUpgrades: [] },
-      grammaticalRange: { score: 0, feedback: '', examples: [] },
-      pronunciation: { score: 0, feedback: '' },
-      modelAnswers: [],
-      summary: '',
-      keyStrengths: [],
-      priorityImprovements: []
-    };
-
-    // Extract overall band score
-    const bandMatch = responseText.match(/overall[:\s]+(\d+\.?\d*)/i);
-    if (bandMatch) {
-      evaluation.overallBand = parseFloat(bandMatch[1]);
-    }
-
-    // Extract criterion scores
-    const criteriaPatterns = [
-      { key: 'fluencyCoherence', pattern: /fluency[^:]*:?\s*(\d+\.?\d*)/i },
-      { key: 'lexicalResource', pattern: /lexical[^:]*:?\s*(\d+\.?\d*)/i },
-      { key: 'grammaticalRange', pattern: /grammatical[^:]*:?\s*(\d+\.?\d*)/i },
-      { key: 'pronunciation', pattern: /pronunciation[^:]*:?\s*(\d+\.?\d*)/i }
-    ];
-
-    for (const { key, pattern } of criteriaPatterns) {
-      const match = responseText.match(pattern);
-      if (match) {
-        evaluation[key].score = parseFloat(match[1]);
-      }
-    }
-
-    // If we found an overall band, consider it valid
-    if (evaluation.overallBand > 0) {
-      evaluation.summary = responseText.substring(0, 500);
-      return evaluation;
-    }
-
-    return null;
+    // If no JSON found, return a default structure
+    return getDefaultEvaluation();
   } catch (err) {
     console.error('Error parsing evaluation response:', err);
-    return null;
+    return getDefaultEvaluation();
   }
+}
+
+function getDefaultEvaluation(): any {
+  return {
+    overall_band: 5.0,
+    overallBand: 5.0,
+    fluency_coherence: { score: 5, feedback: 'Evaluation could not be completed properly.', examples: [] },
+    lexical_resource: { score: 5, feedback: 'Evaluation could not be completed properly.', examples: [] },
+    grammatical_range: { score: 5, feedback: 'Evaluation could not be completed properly.', examples: [] },
+    pronunciation: { score: 5, feedback: 'Evaluation could not be completed properly.' },
+    lexical_upgrades: [],
+    part_analysis: [],
+    improvement_priorities: [],
+    strengths_to_maintain: [],
+    examiner_notes: 'The evaluation could not be processed correctly. Please try again.',
+    modelAnswers: []
+  };
+}
+
+function normalizeEvaluationResponse(data: any): any {
+  // Ensure all required arrays exist and are arrays
+  const ensureArray = (val: any) => Array.isArray(val) ? val : [];
+  
+  // Get overall band - support both formats
+  const overallBand = data.overallBand ?? data.overall_band ?? 5.0;
+  
+  // Normalize criterion scores
+  const normalizeCriterion = (camelKey: string, snakeKey: string) => {
+    const val = data[camelKey] ?? data[snakeKey] ?? { score: 5, feedback: '' };
+    return {
+      score: val.score ?? 5,
+      feedback: val.feedback ?? '',
+      examples: ensureArray(val.examples)
+    };
+  };
+  
+  // Get lexical upgrades from various possible locations
+  const lexicalResource = data.lexicalResource ?? data.lexical_resource ?? {};
+  const lexicalUpgrades = ensureArray(lexicalResource.lexicalUpgrades ?? lexicalResource.lexical_upgrades ?? data.lexical_upgrades ?? []);
+  
+  // Normalize part analysis - map from camelCase to snake_case
+  const partAnalysisRaw = ensureArray(data.partAnalysis ?? data.part_analysis ?? []);
+  const partAnalysis = partAnalysisRaw.map((p: any) => ({
+    part_number: p.partNumber ?? p.part_number ?? 0,
+    strengths: ensureArray(p.strengths),
+    improvements: ensureArray(p.improvements)
+  }));
+  
+  return {
+    // Provide both formats for compatibility
+    overall_band: overallBand,
+    overallBand: overallBand,
+    
+    // Snake_case versions (what frontend expects)
+    fluency_coherence: normalizeCriterion('fluencyCoherence', 'fluency_coherence'),
+    lexical_resource: {
+      ...normalizeCriterion('lexicalResource', 'lexical_resource'),
+      lexicalUpgrades: lexicalUpgrades
+    },
+    grammatical_range: normalizeCriterion('grammaticalRange', 'grammatical_range'),
+    pronunciation: {
+      score: (data.pronunciation ?? data.Pronunciation ?? {}).score ?? 5,
+      feedback: (data.pronunciation ?? data.Pronunciation ?? {}).feedback ?? ''
+    },
+    
+    // Arrays that frontend maps over
+    lexical_upgrades: lexicalUpgrades,
+    part_analysis: partAnalysis,
+    improvement_priorities: ensureArray(data.priorityImprovements ?? data.improvement_priorities ?? data.priority_improvements ?? []),
+    strengths_to_maintain: ensureArray(data.keyStrengths ?? data.strengths_to_maintain ?? data.key_strengths ?? []),
+    
+    // Other fields
+    examiner_notes: data.summary ?? data.examiner_notes ?? '',
+    modelAnswers: ensureArray(data.modelAnswers ?? data.model_answers ?? [])
+  };
 }
 
 function getEvaluationSystemPrompt(): string {
