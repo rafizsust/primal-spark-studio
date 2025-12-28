@@ -1,10 +1,20 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Gemini models in fallback order
+const GEMINI_MODELS_FALLBACK_ORDER = [
+  'gemini-1.5-pro',
+  'gemini-1.5-flash',
+  'gemini-pro-latest',
+  'gemini-flash-latest',
+  'gemini-2.0-flash',
+];
 
 interface PartAudio {
   partNumber: number;
@@ -18,8 +28,8 @@ interface EvaluationRequest {
   transcripts?: Record<number, string>;
   topic?: string;
   difficulty?: string;
-  part2SpeakingDuration?: number; // 2025 precision: track Part 2 speaking time
-  fluencyFlag?: boolean; // Flag if Part 2 < 80 seconds (1:20)
+  part2SpeakingDuration?: number;
+  fluencyFlag?: boolean;
 }
 
 serve(async (req) => {
@@ -28,36 +38,90 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY is not configured');
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const appEncryptionKey = Deno.env.get('app_encryption_key');
 
-    // Get user from auth header
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Authorization header required');
-    }
+    // Create client with user's auth
+    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
+      global: {
+        headers: { Authorization: req.headers.get('Authorization')! },
+      },
+    });
 
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    );
+    // Get user
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     if (authError || !user) {
-      throw new Error('Unauthorized');
+      return new Response(JSON.stringify({ error: 'Unauthorized', code: 'UNAUTHORIZED' }), {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
     }
 
+    // Get user's Gemini API key
+    if (!appEncryptionKey) {
+      return new Response(JSON.stringify({ 
+        error: 'Server configuration error: encryption key not set.', 
+        code: 'SERVER_CONFIG_ERROR' 
+      }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const { data: userSecret, error: secretError } = await supabaseClient
+      .from('user_secrets')
+      .select('encrypted_value')
+      .eq('user_id', user.id)
+      .eq('secret_name', 'GEMINI_API_KEY')
+      .single();
+
+    if (secretError || !userSecret) {
+      return new Response(JSON.stringify({ 
+        error: 'Gemini API key not found. Please set it in Settings.', 
+        code: 'API_KEY_NOT_FOUND' 
+      }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Decrypt Gemini API key
+    const encoder = new TextEncoder();
+    const decoder = new TextDecoder();
+    const keyData = encoder.encode(appEncryptionKey);
+    const cryptoKey = await crypto.subtle.importKey(
+      "raw",
+      keyData.slice(0, 32),
+      { name: "AES-GCM" },
+      false,
+      ["decrypt"]
+    );
+
+    const encryptedBytes = Uint8Array.from(atob(userSecret.encrypted_value), c => c.charCodeAt(0));
+    const iv = encryptedBytes.slice(0, 12);
+    const ciphertext = encryptedBytes.slice(12);
+
+    const decryptedData = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      cryptoKey,
+      ciphertext
+    );
+    const geminiApiKey = decoder.decode(decryptedData);
+
+    // Parse request body
     const body: EvaluationRequest = await req.json();
     const { testId, partAudios, transcripts, topic, difficulty, part2SpeakingDuration, fluencyFlag } = body;
 
-    console.log(`Evaluating speaking test ${testId} for user ${user.id}`);
+    console.log(`Evaluating AI speaking test ${testId} for user ${user.id}`);
     console.log(`Parts received: ${partAudios.length}`);
     if (fluencyFlag) {
       console.log(`Fluency flag active: Part 2 speaking duration was ${part2SpeakingDuration}s (under 80s threshold)`);
     }
+
+    // Create service client for storage operations
+    const supabaseService = createClient(supabaseUrl, supabaseServiceKey);
 
     // Upload audio files to storage
     const audioUrls: Record<number, string> = {};
@@ -66,153 +130,90 @@ serve(async (req) => {
         const audioBytes = Uint8Array.from(atob(part.audioBase64), c => c.charCodeAt(0));
         const path = `ai-speaking/${user.id}/${testId}/part${part.partNumber}.webm`;
         
-        const { error: uploadError } = await supabase.storage
+        const { error: uploadError } = await supabaseService.storage
           .from('speaking-audios')
           .upload(path, audioBytes, { contentType: 'audio/webm', upsert: true });
 
         if (!uploadError) {
-          audioUrls[part.partNumber] = supabase.storage.from('speaking-audios').getPublicUrl(path).data.publicUrl;
+          audioUrls[part.partNumber] = supabaseService.storage.from('speaking-audios').getPublicUrl(path).data.publicUrl;
         }
       } catch (err) {
         console.error(`Failed to upload Part ${part.partNumber} audio:`, err);
       }
     }
 
-    // Build evaluation prompt with 2025 precision standards
+    // Build evaluation prompt
     const evaluationPrompt = buildEvaluationPrompt(transcripts, topic, difficulty, part2SpeakingDuration, fluencyFlag);
+    const systemPrompt = getEvaluationSystemPrompt();
 
-    // Call Lovable AI for evaluation
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: getEvaluationSystemPrompt() },
-          { role: 'user', content: evaluationPrompt }
-        ],
-        tools: [{
-          type: 'function',
-          function: {
-            name: 'submit_evaluation',
-            description: 'Submit the comprehensive IELTS speaking evaluation with model answers',
-            parameters: {
-              type: 'object',
-              properties: {
-                overallBand: { type: 'number', description: 'Overall band score (0-9)' },
-                fluencyCoherence: {
-                  type: 'object',
-                  properties: {
-                    score: { type: 'number' },
-                    feedback: { type: 'string' },
-                    examples: { type: 'array', items: { type: 'string' } }
-                  },
-                  required: ['score', 'feedback', 'examples']
-                },
-                lexicalResource: {
-                  type: 'object',
-                  properties: {
-                    score: { type: 'number' },
-                    feedback: { type: 'string' },
-                    examples: { type: 'array', items: { type: 'string' } },
-                    lexicalUpgrades: {
-                      type: 'array',
-                      items: {
-                        type: 'object',
-                        properties: {
-                          original: { type: 'string' },
-                          upgraded: { type: 'string' },
-                          context: { type: 'string' }
-                        },
-                        required: ['original', 'upgraded', 'context']
-                      }
-                    }
-                  },
-                  required: ['score', 'feedback', 'examples', 'lexicalUpgrades']
-                },
-                grammaticalRange: {
-                  type: 'object',
-                  properties: {
-                    score: { type: 'number' },
-                    feedback: { type: 'string' },
-                    examples: { type: 'array', items: { type: 'string' } },
-                    errors: { type: 'array', items: { type: 'string' } }
-                  },
-                  required: ['score', 'feedback', 'examples']
-                },
-                pronunciation: {
-                  type: 'object',
-                  properties: {
-                    score: { type: 'number' },
-                    feedback: { type: 'string' },
-                    notes: { type: 'array', items: { type: 'string' } }
-                  },
-                  required: ['score', 'feedback']
-                },
-                partAnalysis: {
-                  type: 'array',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      partNumber: { type: 'number' },
-                      strengths: { type: 'array', items: { type: 'string' } },
-                      improvements: { type: 'array', items: { type: 'string' } },
-                      wordLimitViolations: { type: 'array', items: { type: 'string' } }
-                    },
-                    required: ['partNumber', 'strengths', 'improvements']
-                  }
-                },
-                modelAnswers: {
-                  type: 'array',
-                  description: 'Band 8+ model answers for key questions in each part',
-                  items: {
-                    type: 'object',
-                    properties: {
-                      partNumber: { type: 'number', description: 'Part 1, 2, or 3' },
-                      question: { type: 'string', description: 'The question being answered' },
-                      candidateResponse: { type: 'string', description: 'What the candidate said (summarized)' },
-                      modelAnswer: { type: 'string', description: 'A Band 8+ example response' },
-                      keyFeatures: { 
-                        type: 'array', 
-                        items: { type: 'string' },
-                        description: 'What makes this a Band 8+ answer'
-                      }
-                    },
-                    required: ['partNumber', 'question', 'modelAnswer', 'keyFeatures']
-                  }
-                },
-                summary: { type: 'string', description: 'Overall summary and advice' },
-                keyStrengths: { type: 'array', items: { type: 'string' } },
-                priorityImprovements: { type: 'array', items: { type: 'string' } }
-              },
-              required: ['overallBand', 'fluencyCoherence', 'lexicalResource', 'grammaticalRange', 'pronunciation', 'modelAnswers', 'summary']
+    // Call Gemini API with fallback models
+    let evaluation: any = null;
+    let usedModel: string | null = null;
+
+    for (const modelName of GEMINI_MODELS_FALLBACK_ORDER) {
+      console.log(`Attempting evaluation with Gemini model: ${modelName}`);
+      const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiApiKey}`;
+
+      try {
+        const geminiResponse = await fetch(GEMINI_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: `${systemPrompt}\n\n${evaluationPrompt}` }]
+            }],
+            generationConfig: {
+              temperature: 0.3,
+              maxOutputTokens: 4096,
             }
+          }),
+        });
+
+        if (!geminiResponse.ok) {
+          const errorText = await geminiResponse.text();
+          console.error(`Gemini ${modelName} error:`, errorText);
+          if (geminiResponse.status === 429 || geminiResponse.status === 503) {
+            continue; // Try next model
           }
-        }],
-        tool_choice: { type: 'function', function: { name: 'submit_evaluation' } }
-      }),
-    });
+          if (geminiResponse.status === 400 && errorText.includes('API_KEY')) {
+            return new Response(JSON.stringify({ 
+              error: 'Invalid Gemini API key. Please update it in Settings.',
+              code: 'INVALID_API_KEY'
+            }), {
+              status: 403,
+              headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            });
+          }
+          continue;
+        }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Evaluation API error:', errorText);
-      throw new Error('Failed to evaluate speaking test');
+        const data = await geminiResponse.json();
+        const responseText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!responseText) {
+          console.error(`No response text from ${modelName}`);
+          continue;
+        }
+
+        // Parse JSON from response
+        evaluation = parseEvaluationResponse(responseText);
+        if (evaluation) {
+          usedModel = modelName;
+          console.log(`Successfully evaluated with model: ${modelName}`);
+          break;
+        }
+      } catch (err) {
+        console.error(`Error with model ${modelName}:`, err);
+        continue;
+      }
     }
 
-    const data = await response.json();
-    const toolCall = data.choices?.[0]?.message?.tool_calls?.[0];
-    
-    if (!toolCall?.function?.arguments) {
-      throw new Error('Invalid evaluation response');
+    if (!evaluation) {
+      throw new Error('Failed to evaluate speaking test with any available model');
     }
 
-    const evaluation = JSON.parse(toolCall.function.arguments);
-
-    // Save to database
-    const { error: insertError } = await supabase.from('ai_practice_results').insert({
+    // Save to database using service client
+    const { error: insertError } = await supabaseService.from('ai_practice_results').insert({
       user_id: user.id,
       test_id: testId,
       module: 'speaking',
@@ -232,7 +233,8 @@ serve(async (req) => {
     return new Response(JSON.stringify({
       success: true,
       evaluation,
-      audioUrls
+      audioUrls,
+      usedModel
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -249,6 +251,61 @@ serve(async (req) => {
   }
 });
 
+function parseEvaluationResponse(responseText: string): any {
+  try {
+    // Try to extract JSON from the response
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[0]);
+    }
+    
+    // If no JSON found, try to parse structured data
+    const evaluation: any = {
+      overallBand: 0,
+      fluencyCoherence: { score: 0, feedback: '', examples: [] },
+      lexicalResource: { score: 0, feedback: '', examples: [], lexicalUpgrades: [] },
+      grammaticalRange: { score: 0, feedback: '', examples: [] },
+      pronunciation: { score: 0, feedback: '' },
+      modelAnswers: [],
+      summary: '',
+      keyStrengths: [],
+      priorityImprovements: []
+    };
+
+    // Extract overall band score
+    const bandMatch = responseText.match(/overall[:\s]+(\d+\.?\d*)/i);
+    if (bandMatch) {
+      evaluation.overallBand = parseFloat(bandMatch[1]);
+    }
+
+    // Extract criterion scores
+    const criteriaPatterns = [
+      { key: 'fluencyCoherence', pattern: /fluency[^:]*:?\s*(\d+\.?\d*)/i },
+      { key: 'lexicalResource', pattern: /lexical[^:]*:?\s*(\d+\.?\d*)/i },
+      { key: 'grammaticalRange', pattern: /grammatical[^:]*:?\s*(\d+\.?\d*)/i },
+      { key: 'pronunciation', pattern: /pronunciation[^:]*:?\s*(\d+\.?\d*)/i }
+    ];
+
+    for (const { key, pattern } of criteriaPatterns) {
+      const match = responseText.match(pattern);
+      if (match) {
+        evaluation[key].score = parseFloat(match[1]);
+      }
+    }
+
+    // If we found an overall band, consider it valid
+    if (evaluation.overallBand > 0) {
+      evaluation.summary = responseText.substring(0, 500);
+      return evaluation;
+    }
+
+    return null;
+  } catch (err) {
+    console.error('Error parsing evaluation response:', err);
+    return null;
+  }
+}
+
 function getEvaluationSystemPrompt(): string {
   return `You are an expert IELTS Speaking examiner with extensive experience in the 2025 examination standards. You provide detailed, constructive feedback following official IELTS band descriptors.
 
@@ -263,7 +320,51 @@ SCORING CRITERIA (Band Descriptors):
 - Grammatical Range & Accuracy: Sentence variety, error frequency, complex structures
 - Pronunciation: Clarity, intonation, stress patterns, connected speech
 
-Be encouraging but honest. Provide specific examples from the transcript.`;
+Be encouraging but honest. Provide specific examples from the transcript.
+
+IMPORTANT: Respond with a JSON object in this exact format:
+{
+  "overallBand": number (0-9, can use 0.5 increments),
+  "fluencyCoherence": {
+    "score": number,
+    "feedback": "string",
+    "examples": ["string array"]
+  },
+  "lexicalResource": {
+    "score": number,
+    "feedback": "string",
+    "examples": ["string array"],
+    "lexicalUpgrades": [{"original": "common word", "upgraded": "band 8+ word", "context": "usage context"}]
+  },
+  "grammaticalRange": {
+    "score": number,
+    "feedback": "string",
+    "examples": ["string array"],
+    "errors": ["string array of grammatical errors"]
+  },
+  "pronunciation": {
+    "score": number,
+    "feedback": "string",
+    "notes": ["string array"]
+  },
+  "partAnalysis": [
+    {"partNumber": 1, "strengths": ["string array"], "improvements": ["string array"]},
+    {"partNumber": 2, "strengths": ["string array"], "improvements": ["string array"]},
+    {"partNumber": 3, "strengths": ["string array"], "improvements": ["string array"]}
+  ],
+  "modelAnswers": [
+    {
+      "partNumber": number,
+      "question": "the question",
+      "candidateResponse": "what they said (summarized)",
+      "modelAnswer": "Band 8+ example response",
+      "keyFeatures": ["what makes this Band 8+"]
+    }
+  ],
+  "summary": "overall summary and advice",
+  "keyStrengths": ["string array"],
+  "priorityImprovements": ["string array"]
+}`;
 }
 
 function buildEvaluationPrompt(
@@ -282,7 +383,6 @@ function buildEvaluationPrompt(
     prompt += `DIFFICULTY LEVEL: ${difficulty}\n`;
   }
   
-  // 2025 Precision Standards: Part 2 Duration Analysis
   if (part2SpeakingDuration !== undefined) {
     prompt += `\nPART 2 SPEAKING DURATION: ${Math.floor(part2SpeakingDuration)} seconds`;
     if (fluencyFlag) {
@@ -308,20 +408,10 @@ function buildEvaluationPrompt(
 4. Lexical upgrades for common vocabulary
 5. Word limit violations (if any ONE WORD questions were answered with phrases)
 6. Actionable improvement suggestions
-7. MODEL ANSWERS: For 2-3 key questions from each part, provide Band 8+ example responses that demonstrate:
-   - Sophisticated vocabulary and collocations
-   - Complex grammatical structures
-   - Natural fluency and coherence
-   - Clear organization and development of ideas
-   
-   For each model answer, explain what makes it a Band 8+ response.`;
+7. MODEL ANSWERS: For 2-3 key questions from each part, provide Band 8+ example responses`;
 
-  // Add specific instruction for fluency flag
   if (fluencyFlag) {
-    prompt += `\n\n**IMPORTANT 2025 PRECISION STANDARD**: The candidate spoke for only ${Math.floor(part2SpeakingDuration || 0)} seconds in Part 2, which is significantly below the expected 1:20 minimum (80 seconds). This MUST be flagged as a potential score reduction area in the Fluency & Coherence criterion. Specifically note that:
-- The candidate did not sustain speech for the expected duration
-- This affects their ability to demonstrate extended discourse
-- Include this as a priority improvement area`;
+    prompt += `\n\n**IMPORTANT**: The candidate spoke for only ${Math.floor(part2SpeakingDuration || 0)} seconds in Part 2, which is significantly below the expected 1:20 minimum (80 seconds). Flag this as a fluency concern.`;
   }
 
   return prompt;
