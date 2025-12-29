@@ -35,7 +35,28 @@ export type ListeningQuestionType =
   | 'MULTIPLE_CHOICE_MULTIPLE';
 
 // Writing task types
-export type WritingTaskType = 'TASK_1' | 'TASK_2';
+export type WritingTaskType = 'FULL_TEST' | 'TASK_1' | 'TASK_2';
+
+// Writing Task 1 visual types (charts, graphs, diagrams)
+export type WritingTask1VisualType = 
+  | 'RANDOM'
+  | 'BAR_CHART'
+  | 'LINE_GRAPH'
+  | 'PIE_CHART'
+  | 'TABLE'
+  | 'MIXED_CHARTS'  // e.g., pie + bar
+  | 'PROCESS_DIAGRAM'
+  | 'MAP'
+  | 'COMPARISON_DIAGRAM';
+
+// Writing Task 2 essay types
+export type WritingTask2EssayType =
+  | 'RANDOM'
+  | 'OPINION'          // Agree/Disagree
+  | 'DISCUSSION'       // Discuss both views
+  | 'PROBLEM_SOLUTION'
+  | 'ADVANTAGES_DISADVANTAGES'
+  | 'TWO_PART_QUESTION';
 
 // Speaking part types
 export type SpeakingPartType = 'FULL_TEST' | 'PART_1' | 'PART_2' | 'PART_3';
@@ -63,7 +84,8 @@ export const QUESTION_COUNTS: Record<string, number> = {
   'MULTIPLE_CHOICE_SINGLE': 4,
   'MATCHING_CORRECT_LETTER': 5,
   'DRAG_AND_DROP_OPTIONS': 5,
-  // Writing - 1 task
+  // Writing - tasks
+  'WRITING_FULL_TEST': 2,
   'TASK_1': 1,
   'TASK_2': 1,
   // Speaking - varies by part
@@ -71,6 +93,20 @@ export const QUESTION_COUNTS: Record<string, number> = {
   'PART_1': 4,
   'PART_2': 1,
   'PART_3': 4,
+};
+
+// Default times for writing tasks (in minutes)
+export const WRITING_DEFAULT_TIMES: Record<string, number> = {
+  'FULL_TEST': 60,
+  'TASK_1': 20,
+  'TASK_2': 40,
+};
+
+// Writing time ranges (min, max) in minutes
+export const WRITING_TIME_RANGES: Record<string, { min: number; max: number }> = {
+  'FULL_TEST': { min: 10, max: 90 },
+  'TASK_1': { min: 10, max: 30 },
+  'TASK_2': { min: 10, max: 60 },
 };
 
 // Default times based on question count
@@ -126,16 +162,34 @@ export interface GeneratedPassage {
   passage_number: number;
 }
 
-// Writing task structure
-export interface GeneratedWritingTask {
+// Writing task structure (single task)
+export interface GeneratedWritingSingleTask {
   id: string;
   task_type: 'task1' | 'task2';
   instruction: string;
   text_content?: string;
   image_base64?: string; // For Task 1 charts/graphs
   image_description?: string;
+  visual_type?: string; // Type of visual for Task 1
   word_limit_min: number;
   word_limit_max?: number;
+}
+
+// Writing full test structure (Task 1 + Task 2)
+export interface GeneratedWritingFullTest {
+  id: string;
+  test_type: 'full_test';
+  task1: GeneratedWritingSingleTask;
+  task2: GeneratedWritingSingleTask;
+  time_minutes: number;
+}
+
+// Backwards compatible: WritingTask can be single or full
+export type GeneratedWritingTask = GeneratedWritingSingleTask | GeneratedWritingFullTest;
+
+// Helper to check if it's a full test
+export function isWritingFullTest(task: GeneratedWritingTask): task is GeneratedWritingFullTest {
+  return 'test_type' in task && task.test_type === 'full_test';
 }
 
 // Speaking part structure
@@ -218,10 +272,20 @@ function stripBase64Data(test: GeneratedTest): GeneratedTest {
   // Remove audio data
   delete stripped.audioBase64;
 
-  // Remove writing task image
+  // Remove writing task image(s)
   if (stripped.writingTask) {
-    stripped.writingTask = { ...stripped.writingTask };
-    delete stripped.writingTask.image_base64;
+    if (isWritingFullTest(stripped.writingTask)) {
+      // Full test - strip from both tasks
+      stripped.writingTask = {
+        ...stripped.writingTask,
+        task1: { ...stripped.writingTask.task1, image_base64: undefined },
+        task2: { ...stripped.writingTask.task2, image_base64: undefined },
+      };
+    } else {
+      // Single task
+      stripped.writingTask = { ...stripped.writingTask };
+      delete (stripped.writingTask as GeneratedWritingSingleTask).image_base64;
+    }
   }
 
   // Remove speaking audio
