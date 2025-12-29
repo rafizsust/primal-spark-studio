@@ -141,6 +141,36 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_practice_topic_completions: {
+        Row: {
+          completed_count: number
+          created_at: string
+          id: string
+          module: string
+          topic: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          completed_count?: number
+          created_at?: string
+          id?: string
+          module: string
+          topic: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          completed_count?: number
+          created_at?: string
+          id?: string
+          module?: string
+          topic?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       flashcard_cards: {
         Row: {
           correct_count: number
@@ -1224,6 +1254,10 @@ export type Database = {
     Functions: {
       can_user_submit: { Args: { p_user_id: string }; Returns: boolean }
       has_active_subscription: { Args: { p_user_id: string }; Returns: boolean }
+      increment_topic_completion: {
+        Args: { p_module: string; p_topic: string; p_user_id: string }
+        Returns: undefined
+      }
       is_admin: { Args: { check_user_id: string }; Returns: boolean }
       is_promotion_active: { Args: never; Returns: boolean }
     }

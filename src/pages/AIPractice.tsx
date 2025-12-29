@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
@@ -15,8 +15,19 @@ import { AILoadingScreen } from '@/components/common/AILoadingScreen';
 import { useToast } from '@/hooks/use-toast';
 import { describeApiError } from '@/lib/apiErrors';
 import { useAuth } from '@/hooks/useAuth';
+import { useTopicCompletions } from '@/hooks/useTopicCompletions';
 import { supabase } from '@/integrations/supabase/client';
 import { playCompletionSound, playErrorSound } from '@/lib/sounds';
+import { 
+  READING_TOPICS, 
+  LISTENING_TOPICS, 
+  WRITING_TASK1_TOPICS, 
+  WRITING_TASK2_TOPICS,
+  SPEAKING_TOPICS_PART1,
+  SPEAKING_TOPICS_PART2,
+  SPEAKING_TOPICS_PART3,
+  SPEAKING_TOPICS_FULL,
+} from '@/lib/ieltsTopics';
 import { 
   BookOpen, 
   Headphones, 
@@ -82,16 +93,6 @@ const SPEAKING_PART_TYPES: { value: SpeakingPartType; label: string; description
   { value: 'PART_1', label: 'Part 1 Only', description: 'Introduction and interview' },
   { value: 'PART_2', label: 'Part 2 Only', description: 'Individual long turn with cue card' },
   { value: 'PART_3', label: 'Part 3 Only', description: 'Discussion and abstract topics' },
-];
-
-// Gemini Live API HD Voices (British/neutral accents for IELTS examiner)
-const SPEAKING_EXAMINER_VOICES: { value: string; label: string; description: string }[] = [
-  { value: 'Puck', label: 'Puck (Upbeat)', description: 'Neutral British, professional and encouraging' },
-  { value: 'Charon', label: 'Charon (Informative)', description: 'Clear, measured British accent' },
-  { value: 'Kore', label: 'Kore (Firm)', description: 'Professional female examiner voice' },
-  { value: 'Aoede', label: 'Aoede (Breezy)', description: 'Friendly, relaxed British female' },
-  { value: 'Fenrir', label: 'Fenrir (Excitable)', description: 'Energetic male examiner' },
-  { value: 'Leda', label: 'Leda (Youthful)', description: 'Young, clear female voice' },
 ];
 
 const DIFFICULTY_OPTIONS: { value: DifficultyLevel; label: string; color: string }[] = [
@@ -177,6 +178,85 @@ export default function AIPractice() {
   const [timeMinutes, setTimeMinutes] = useState(10);
   const [audioSpeed, setAudioSpeed] = useState(1);
 
+  // Topic completion tracking
+  const readingCompletions = useTopicCompletions('reading');
+  const listeningCompletions = useTopicCompletions('listening');
+  const writingCompletions = useTopicCompletions('writing');
+  const speakingCompletions = useTopicCompletions('speaking');
+
+  // Get topics based on current module/subtype
+  const currentTopics = useMemo(() => {
+    switch (activeModule) {
+      case 'reading':
+        return READING_TOPICS;
+      case 'listening':
+        return LISTENING_TOPICS;
+      case 'writing':
+        return writingTaskType === 'TASK_1' ? WRITING_TASK1_TOPICS : WRITING_TASK2_TOPICS;
+      case 'speaking':
+        switch (speakingPartType) {
+          case 'PART_1': return SPEAKING_TOPICS_PART1;
+          case 'PART_2': return SPEAKING_TOPICS_PART2;
+          case 'PART_3': return SPEAKING_TOPICS_PART3;
+          default: return SPEAKING_TOPICS_FULL;
+        }
+      default:
+        return [];
+    }
+  }, [activeModule, writingTaskType, speakingPartType]);
+
+  // Get the completion hook for current module
+  const currentCompletions = useMemo(() => {
+    switch (activeModule) {
+      case 'reading': return readingCompletions;
+      case 'listening': return listeningCompletions;
+      case 'writing': return writingCompletions;
+      case 'speaking': return speakingCompletions;
+      default: return readingCompletions;
+    }
+  }, [activeModule, readingCompletions, listeningCompletions, writingCompletions, speakingCompletions]);
+
+  // Calculate topic select value
+  const topicSelectValue = useMemo(() => {
+    if (!topicPreference) return '__random__';
+    // Type assertion to fix readonly array issue
+    const topicsArray = currentTopics as readonly string[];
+    return topicsArray.includes(topicPreference) ? topicPreference : '__custom__';
+  }, [topicPreference, currentTopics]);
+
+  // Browser TTS voices for speaking
+  const [availableVoices, setAvailableVoices] = useState<{ name: string; lang: string; displayName: string }[]>([]);
+  const [selectedVoice, setSelectedVoice] = useState('');
+
+  // Load browser TTS voices
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis?.getVoices() || [];
+      const englishVoices = voices
+        .filter(v => v.lang.startsWith('en'))
+        .map(v => ({
+          name: v.name,
+          lang: v.lang,
+          displayName: `${v.name} (${v.lang})`
+        }))
+        .slice(0, 20);
+      
+      setAvailableVoices(englishVoices);
+      
+      if (englishVoices.length > 0 && !selectedVoice) {
+        const britishVoice = englishVoices.find(v => v.lang.includes('GB')) || englishVoices[0];
+        setSelectedVoice(britishVoice.name);
+      }
+    };
+
+    loadVoices();
+    window.speechSynthesis.onvoiceschanged = loadVoices;
+
+    return () => {
+      window.speechSynthesis.onvoiceschanged = null;
+    };
+  }, [selectedVoice]);
+
   // Reading-specific configuration
   const [readingPassagePreset, setReadingPassagePreset] = useState<keyof typeof READING_PASSAGE_PRESETS>('medium');
   const [customQuestionCount, setCustomQuestionCount] = useState(5);
@@ -194,9 +274,6 @@ export default function AIPractice() {
   // Monologue mode for Fill-in-Blank (single speaker like IELTS Part 4)
   const [monologueModeEnabled, setMonologueModeEnabled] = useState(false);
   
-  // Speaking-specific: examiner voice selection
-  const [speakingExaminerVoice, setSpeakingExaminerVoice] = useState('Puck');
-
   // Speaker configuration
   const [speaker1Config, setSpeaker1Config] = useState<SpeakerConfig>({
     gender: 'female',
@@ -1023,31 +1100,52 @@ export default function AIPractice() {
                     </div>
                   </div>
 
-                  {/* Examiner Voice Selection */}
+                  {/* Browser TTS Voice Selection */}
                   <div className="space-y-4 border-t pt-6">
                     <Label className="text-base font-medium flex items-center gap-2">
                       <Volume2 className="w-4 h-4" />
                       Examiner Voice
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Select the AI examiner's voice personality for your speaking test
+                      Select the browser voice for the AI examiner
                     </p>
                     
-                    <RadioGroup
-                      value={speakingExaminerVoice}
-                      onValueChange={(v) => setSpeakingExaminerVoice(v)}
-                      className="grid grid-cols-1 sm:grid-cols-2 gap-3"
+                    {availableVoices.length > 0 ? (
+                      <Select value={selectedVoice} onValueChange={setSelectedVoice}>
+                        <SelectTrigger className="max-w-md">
+                          <SelectValue placeholder="Select a voice" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {availableVoices.map((voice) => (
+                            <SelectItem key={voice.name} value={voice.name}>
+                              {voice.displayName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Loading voices...</p>
+                    )}
+
+                    {/* Preview button */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        if (!selectedVoice) return;
+                        window.speechSynthesis.cancel();
+                        const utterance = new SpeechSynthesisUtterance(
+                          "Hello, I will be your IELTS Speaking examiner today."
+                        );
+                        const voice = window.speechSynthesis.getVoices().find(v => v.name === selectedVoice);
+                        if (voice) utterance.voice = voice;
+                        utterance.rate = 0.95;
+                        window.speechSynthesis.speak(utterance);
+                      }}
                     >
-                      {SPEAKING_EXAMINER_VOICES.map((voice) => (
-                        <div key={voice.value} className="flex items-center space-x-2">
-                          <RadioGroupItem value={voice.value} id={voice.value} />
-                          <Label htmlFor={voice.value} className="flex-1 cursor-pointer">
-                            <div className="font-medium">{voice.label}</div>
-                            <div className="text-xs text-muted-foreground">{voice.description}</div>
-                          </Label>
-                        </div>
-                      ))}
-                    </RadioGroup>
+                      <Volume2 className="w-4 h-4 mr-2" />
+                      Preview Voice
+                    </Button>
                   </div>
 
                   {/* Difficulty affects question complexity */}
@@ -1102,20 +1200,50 @@ export default function AIPractice() {
                 </div>
               </div>
 
-              {/* Topic Preference */}
+              {/* Topic Preference with Dropdown */}
               <div className="space-y-3">
-                <Label htmlFor="topic" className="text-base font-medium">
-                  Topic Preference (Optional)
+                <Label className="text-base font-medium">
+                  Topic Preference
                 </Label>
-                <Input
-                  id="topic"
-                  value={topicPreference}
-                  onChange={(e) => setTopicPreference(e.target.value.slice(0, 100))}
-                  placeholder="e.g., Environmental science, Technology... (max 100 chars)"
-                  maxLength={100}
-                />
+                <div className="flex flex-col gap-3 max-w-md">
+                  <Select
+                    value={topicSelectValue}
+                    onValueChange={(v) => {
+                      if (v === '__random__') {
+                        setTopicPreference('');
+                        return;
+                      }
+                      if (v === '__custom__') {
+                        // Keep current custom text
+                        return;
+                      }
+                      setTopicPreference(v);
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a topic" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__random__">Random (recommended)</SelectItem>
+                      <SelectItem value="__custom__">Custom (type below)</SelectItem>
+                      {currentTopics.map((t) => (
+                        <SelectItem key={t} value={t}>
+                          {currentCompletions.getTopicLabel(t)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Input
+                    id="topic"
+                    value={topicPreference}
+                    onChange={(e) => setTopicPreference(e.target.value.slice(0, 100))}
+                    placeholder="Or type your own topic (optional)"
+                    maxLength={100}
+                  />
+                </div>
                 <p className="text-sm text-muted-foreground">
-                  Leave empty for a random topic.
+                  Select a common IELTS topic or type your own. Leave empty for random.
                 </p>
               </div>
 

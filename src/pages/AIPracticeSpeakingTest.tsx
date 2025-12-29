@@ -18,6 +18,7 @@ import {
   VolumeX,
   Loader2,
   Play,
+  Pause,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -80,6 +81,7 @@ export default function AIPracticeSpeakingTest() {
   const [currentPart, setCurrentPart] = useState<1 | 2 | 3>(1);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [timeLeft, setTimeLeft] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
 
   // TTS state
   const [isMuted, setIsMuted] = useState(false);
@@ -748,7 +750,7 @@ export default function AIPracticeSpeakingTest() {
     loadTest();
   }, [testId, navigate, toast]);
 
-  // Timer effect - use timeLeft as dependency to restart when set to new value
+  // Timer effect - use timeLeft and isPaused as dependencies
   useEffect(() => {
     // Clear any existing timer first
     if (timerRef.current) {
@@ -756,7 +758,7 @@ export default function AIPracticeSpeakingTest() {
       timerRef.current = null;
     }
     
-    if (timeLeft <= 0) return;
+    if (timeLeft <= 0 || isPaused) return;
 
     timerRef.current = setInterval(() => {
       setTimeLeft((prev) => {
@@ -775,7 +777,22 @@ export default function AIPracticeSpeakingTest() {
         timerRef.current = null;
       }
     };
-  }, [timeLeft]); // Trigger on any timeLeft change
+  }, [timeLeft, isPaused]); // Also trigger when paused changes
+
+  // Pause/Resume toggle
+  const togglePause = () => {
+    if (isPaused) {
+      // Resume
+      setIsPaused(false);
+      if (isMuted) return;
+      // Resume TTS if it was speaking
+      // Note: Browser TTS doesn't support resume, so we just continue
+    } else {
+      // Pause
+      setIsPaused(true);
+      tts.cancel(); // Stop TTS
+    }
+  };
 
   // Start test function
   const startTest = () => {
@@ -848,16 +865,40 @@ export default function AIPracticeSpeakingTest() {
             </span>
           </div>
           
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
             {/* Timer */}
             {timeLeft > 0 && (
               <div className={cn(
                 "flex items-center gap-2 px-3 py-1 rounded-full font-mono text-lg",
+                isPaused ? "bg-warning/20 text-warning" :
                 timeLeft <= 10 ? "bg-destructive/20 text-destructive animate-pulse" : "bg-muted"
               )}>
                 <Clock className="w-4 h-4" />
                 {formatTime(timeLeft)}
+                {isPaused && <span className="text-xs ml-1">(Paused)</span>}
               </div>
+            )}
+            
+            {/* Central Pause/Resume button */}
+            {(phase.includes('recording') || phase.includes('prep')) && (
+              <Button
+                variant={isPaused ? "default" : "outline"}
+                size="sm"
+                onClick={togglePause}
+                className="gap-2"
+              >
+                {isPaused ? (
+                  <>
+                    <Play className="w-4 h-4" />
+                    Resume
+                  </>
+                ) : (
+                  <>
+                    <Pause className="w-4 h-4" />
+                    Pause
+                  </>
+                )}
+              </Button>
             )}
             
             {/* Mute button */}
