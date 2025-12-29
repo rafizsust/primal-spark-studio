@@ -49,6 +49,9 @@ type GeneratedTestPayload = {
 };
 
 serve(async (req) => {
+  const startTime = Date.now();
+  console.log(`[evaluate-ai-speaking] Request received at ${new Date().toISOString()}`);
+  
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -69,13 +72,16 @@ serve(async (req) => {
     // Get user
     const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
     if (authError || !user) {
+      console.error('[evaluate-ai-speaking] Auth error:', authError?.message);
       return new Response(JSON.stringify({ error: 'Unauthorized', code: 'UNAUTHORIZED' }), {
         status: 401,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
+    console.log(`[evaluate-ai-speaking] User authenticated: ${user.id}`);
 
     if (!appEncryptionKey) {
+      console.error('[evaluate-ai-speaking] app_encryption_key not set');
       return new Response(JSON.stringify({
         error: 'Server configuration error: encryption key not set.',
         code: 'SERVER_CONFIG_ERROR'
@@ -94,6 +100,7 @@ serve(async (req) => {
       .single();
 
     if (secretError || !userSecret) {
+      console.error('[evaluate-ai-speaking] Gemini API key not found for user:', user.id);
       return new Response(JSON.stringify({
         error: 'Gemini API key not found. Please set it in Settings.',
         code: 'API_KEY_NOT_FOUND'
@@ -126,12 +133,14 @@ serve(async (req) => {
     );
 
     const geminiApiKey = decoder.decode(decryptedData);
+    console.log('[evaluate-ai-speaking] Gemini API key decrypted successfully');
 
     // Parse request body
     const body: EvaluationRequest = await req.json();
     const { testId, audioData, durations, topic, difficulty, part2SpeakingDuration, fluencyFlag } = body;
 
     if (!testId || !audioData || typeof audioData !== 'object') {
+      console.error('[evaluate-ai-speaking] Bad request: missing testId or audioData');
       return new Response(JSON.stringify({ error: 'Missing testId or audioData', code: 'BAD_REQUEST' }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -139,8 +148,10 @@ serve(async (req) => {
     }
 
     const audioKeys = Object.keys(audioData);
-    console.log(`Evaluating AI speaking test ${testId} for user ${user.id}`);
-    console.log(`Audio segments received: ${audioKeys.length}`);
+    const totalPayloadSize = JSON.stringify(audioData).length;
+    console.log(`[evaluate-ai-speaking] Test: ${testId}, User: ${user.id}`);
+    console.log(`[evaluate-ai-speaking] Audio segments: ${audioKeys.length}, Payload size: ${(totalPayloadSize / 1024 / 1024).toFixed(2)}MB`);
+    console.log(`[evaluate-ai-speaking] Audio keys: ${audioKeys.join(', ')}`);
 
     // Load AI practice test payload (for question context)
     const { data: testRow, error: testError } = await supabaseClient
@@ -208,33 +219,44 @@ serve(async (req) => {
       fluencyFlag,
     });
 
-    // Call Gemini API with fallback models
+    // Call Gemini API with fallback models and timeout
     let evaluationRaw: any = null;
     let usedModel: string | null = null;
+    const GEMINI_TIMEOUT_MS = 120_000; // 2 minutes timeout for large audio payloads
+
+    console.log(`[evaluate-ai-speaking] Starting Gemini API call, timeout: ${GEMINI_TIMEOUT_MS}ms`);
 
     for (const modelName of GEMINI_MODELS_FALLBACK_ORDER) {
-      console.log(`Attempting evaluation with Gemini model: ${modelName}`);
+      console.log(`[evaluate-ai-speaking] Attempting model: ${modelName}`);
       const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(geminiApiKey)}`;
 
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+        
         const geminiResponse = await fetch(GEMINI_API_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          signal: controller.signal,
           body: JSON.stringify({
             contents,
             generationConfig: {
               temperature: 0.2,
-              maxOutputTokens: 4096,
+              maxOutputTokens: 8192, // Increased for full test transcripts
               responseMimeType: 'application/json',
             },
           }),
         });
+        
+        clearTimeout(timeoutId);
+        console.log(`[evaluate-ai-speaking] Gemini ${modelName} response status: ${geminiResponse.status}`);
 
         if (!geminiResponse.ok) {
           const errorText = await geminiResponse.text();
-          console.error(`Gemini ${modelName} error:`, errorText);
+          console.error(`[evaluate-ai-speaking] Gemini ${modelName} error (${geminiResponse.status}):`, errorText.slice(0, 500));
 
           if (geminiResponse.status === 429 || geminiResponse.status === 503) {
+            console.log(`[evaluate-ai-speaking] Rate limited or service unavailable, trying next model...`);
             continue;
           }
 
@@ -258,24 +280,32 @@ serve(async (req) => {
           .join('\n');
 
         if (!responseText) {
-          console.error(`No response text from ${modelName}`);
+          console.error(`[evaluate-ai-speaking] No response text from ${modelName}, candidate:`, JSON.stringify(data?.candidates?.[0]).slice(0, 500));
           continue;
         }
 
+        console.log(`[evaluate-ai-speaking] Response text length: ${responseText.length}`);
         evaluationRaw = parseJsonFromResponse(responseText);
         if (evaluationRaw) {
           usedModel = modelName;
-          console.log(`Successfully evaluated with model: ${modelName}`);
+          console.log(`[evaluate-ai-speaking] Successfully evaluated with model: ${modelName}`);
           break;
+        } else {
+          console.error(`[evaluate-ai-speaking] Failed to parse JSON from ${modelName} response`);
         }
-      } catch (err) {
-        console.error(`Error with model ${modelName}:`, err);
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          console.error(`[evaluate-ai-speaking] Timeout with model ${modelName} after ${GEMINI_TIMEOUT_MS}ms`);
+        } else {
+          console.error(`[evaluate-ai-speaking] Error with model ${modelName}:`, err.message || err);
+        }
         continue;
       }
     }
 
     if (!evaluationRaw) {
-      throw new Error('Failed to evaluate speaking test with any available model');
+      console.error('[evaluate-ai-speaking] All models failed to evaluate');
+      throw new Error('Failed to evaluate speaking test with any available model. Please try again.');
     }
 
     // Normalize evaluation into the frontend-friendly structure
@@ -338,8 +368,14 @@ serve(async (req) => {
       });
 
     if (insertError) {
-      console.error('Failed to save result:', insertError);
+      console.error('[evaluate-ai-speaking] Failed to save result:', insertError);
+      // Don't fail the request, still return evaluation
+    } else {
+      console.log('[evaluate-ai-speaking] Result saved successfully');
     }
+
+    const elapsed = Date.now() - startTime;
+    console.log(`[evaluate-ai-speaking] Completed in ${elapsed}ms, overall band: ${overallBand}`);
 
     return new Response(JSON.stringify({
       success: true,
@@ -350,9 +386,10 @@ serve(async (req) => {
     });
 
   } catch (error: unknown) {
-    console.error('Speaking Evaluation Error:', error);
+    const elapsed = Date.now() - startTime;
+    console.error(`[evaluate-ai-speaking] Error after ${elapsed}ms:`, error);
     const errorMessage = error instanceof Error ? error.message : 'Evaluation failed';
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: errorMessage, code: 'EVALUATION_ERROR' }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

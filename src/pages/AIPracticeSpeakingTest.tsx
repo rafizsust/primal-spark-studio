@@ -349,6 +349,8 @@ export default function AIPracticeSpeakingTest() {
 
       const fluencyFlag = part2Duration > 0 && part2Duration < PART2_MIN_SPEAKING;
 
+      console.log(`[AIPracticeSpeakingTest] Submitting ${Object.keys(audioData).length} audio segments`);
+      
       const { data, error } = await supabase.functions.invoke('evaluate-ai-speaking', {
         body: {
           testId,
@@ -361,16 +363,30 @@ export default function AIPracticeSpeakingTest() {
         },
       });
 
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      if (error) {
+        console.error('[AIPracticeSpeakingTest] Supabase invoke error:', error);
+        throw new Error(error.message || 'Network error during submission');
+      }
+      
+      if (data?.error) {
+        console.error('[AIPracticeSpeakingTest] Edge function error:', data.error, data.code);
+        throw new Error(data.error);
+      }
 
+      console.log('[AIPracticeSpeakingTest] Submission successful, model used:', data?.usedModel);
       setPhase('done');
       navigate(`/ai-practice/speaking/results/${testId}`);
-    } catch (err) {
-      console.error('Submission error:', err);
+    } catch (err: any) {
+      console.error('[AIPracticeSpeakingTest] Submission error:', err);
+      
+      const errorMessage = err?.message || 'Could not submit test for evaluation.';
+      const isTimeout = errorMessage.toLowerCase().includes('timeout') || errorMessage.toLowerCase().includes('abort');
+      
       toast({
         title: 'Submission Failed',
-        description: 'Could not submit test for evaluation. Please try again.',
+        description: isTimeout 
+          ? 'The evaluation is taking too long. Please try again with a shorter recording.'
+          : errorMessage,
         variant: 'destructive',
       });
       setPhase('done');
