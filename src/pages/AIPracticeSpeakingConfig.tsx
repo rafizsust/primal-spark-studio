@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Navbar } from '@/components/Navbar';
 import { Footer } from '@/components/Footer';
@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { AILoadingScreen } from '@/components/common/AILoadingScreen';
 import { useToast } from '@/hooks/use-toast';
+import { ToastAction } from '@/components/ui/toast';
+import { describeApiError } from '@/lib/apiErrors';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { playCompletionSound, playErrorSound } from '@/lib/sounds';
@@ -48,24 +50,92 @@ const DIFFICULTY_OPTIONS: { value: DifficultyLevel; label: string; color: string
   { value: 'expert', label: 'Expert', color: 'bg-purple-500/20 text-purple-600 dark:text-purple-400 border-purple-500/30', description: 'Challenging abstract discussions' },
 ];
 
-// Common IELTS speaking topics (used for dropdown)
-const SPEAKING_TOPIC_OPTIONS = [
-  'Hometown & living area',
-  'Work & career',
-  'Study & education',
-  'Technology',
-  'Travel & holidays',
-  'Food & cooking',
-  'Health & fitness',
-  'Sports & leisure',
-  'Music & art',
-  'Books & films',
-  'Shopping & spending',
-  'Transport',
-  'Environment',
-  'Family & friends',
-  'Culture & traditions',
-] as const;
+// Common IELTS speaking topics (dropdown)
+const TOPICS_BY_PART: Record<SpeakingPartType, readonly string[]> = {
+  PART_1: [
+    'Hometown & living area',
+    'Accommodation & home',
+    'Work & career',
+    'Study & education',
+    'Daily routine',
+    'Family & friends',
+    'Food & cooking',
+    'Shopping & spending',
+    'Hobbies & leisure',
+    'Sports & fitness',
+    'Music & art',
+    'Books & films',
+    'Travel & holidays',
+    'Transport',
+    'Weather & seasons',
+    'Technology & gadgets',
+    'Social media',
+    'Health & lifestyle',
+    'Clothes & fashion',
+    'Pets & animals',
+    'Weekend plans',
+    'Celebrations & festivals',
+  ],
+  PART_2: [
+    'Describe a person you admire',
+    'Describe a memorable trip',
+    'Describe a place in your city',
+    'Describe an important event',
+    'Describe a time you helped someone',
+    'Describe a challenging experience',
+    'Describe an achievement you are proud of',
+    'Describe a gift you received',
+    'Describe a skill you learned',
+    'Describe a book/movie you enjoyed',
+    'Describe a piece of technology you use',
+    'Describe a hobby you enjoy',
+    'Describe a time you solved a problem',
+    'Describe a time you learned something new',
+    'Describe a time you worked in a team',
+    'Describe a special meal',
+    'Describe an object you use every day',
+    'Describe a rule you would change',
+  ],
+  PART_3: [
+    'Education & learning',
+    'Work culture & careers',
+    'Technology and society',
+    'Media & communication',
+    'Environment & climate',
+    'Health in modern life',
+    'City life vs rural life',
+    'Transport and urban planning',
+    'Culture & traditions',
+    'Tourism & globalisation',
+    'Arts and public funding',
+    'Sports and wellbeing',
+    'Family roles and relationships',
+    'Consumerism & advertising',
+    'Crime and safety',
+    'The future of work',
+  ],
+  FULL_TEST: [
+    'Hometown & living area',
+    'Work & career',
+    'Study & education',
+    'Technology',
+    'Travel & holidays',
+    'Food & cooking',
+    'Health & fitness',
+    'Sports & leisure',
+    'Music & art',
+    'Books & films',
+    'Shopping & spending',
+    'Transport',
+    'Environment',
+    'Family & friends',
+    'Culture & traditions',
+    'Media & communication',
+    'City life',
+    'Education (deep dive)',
+    'Technology (deep dive)',
+  ],
+} as const;
 
 // Browser TTS voice categories
 interface VoiceOption {
@@ -84,10 +154,20 @@ export default function AIPracticeSpeakingConfig() {
   const [partType, setPartType] = useState<SpeakingPartType>('FULL_TEST');
   const [topicPreference, setTopicPreference] = useState('');
   const [selectedVoice, setSelectedVoice] = useState('');
+
+  const topicOptions = useMemo(
+    () => TOPICS_BY_PART[partType] ?? TOPICS_BY_PART.FULL_TEST,
+    [partType],
+  );
+
+  const topicSelectValue = useMemo(() => {
+    if (!topicPreference) return '__random__';
+    return topicOptions.includes(topicPreference) ? topicPreference : '__custom__';
+  }, [topicPreference, topicOptions]);
   
   // Available voices from browser
   const [availableVoices, setAvailableVoices] = useState<VoiceOption[]>([]);
-  
+
   // Loading state
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState(0);
@@ -223,11 +303,29 @@ export default function AIPracticeSpeakingConfig() {
       console.error('Generation error:', err);
       clearInterval(stepInterval);
       playErrorSound();
-      
+
+      const d = describeApiError(err);
+      const action = d.action;
+
       toast({
-        title: 'Generation Failed',
-        description: err.message || 'Failed to generate speaking test. Please try again.',
+        title: d.title,
+        description: d.description,
         variant: 'destructive',
+        action: action ? (
+          <ToastAction
+            altText={action.label}
+            onClick={() => {
+              if (action.href === '#') return;
+              if (action.external) {
+                window.open(action.href, '_blank', 'noopener,noreferrer');
+                return;
+              }
+              navigate(action.href);
+            }}
+          >
+            {action.label}
+          </ToastAction>
+        ) : undefined,
       });
     } finally {
       setIsGenerating(false);
@@ -361,15 +459,26 @@ export default function AIPracticeSpeakingConfig() {
             <CardContent>
               <div className="flex flex-col gap-3 max-w-md">
                 <Select
-                  value={topicPreference || '__random__'}
-                  onValueChange={(v) => setTopicPreference(v === '__random__' ? '' : v)}
+                  value={topicSelectValue}
+                  onValueChange={(v) => {
+                    if (v === '__random__') {
+                      setTopicPreference('');
+                      return;
+                    }
+                    if (v === '__custom__') {
+                      // keep the current custom text (typed below)
+                      return;
+                    }
+                    setTopicPreference(v);
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select a topic" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__random__">Random (recommended)</SelectItem>
-                    {SPEAKING_TOPIC_OPTIONS.map((t) => (
+                    <SelectItem value="__custom__">Custom (type below)</SelectItem>
+                    {topicOptions.map((t) => (
                       <SelectItem key={t} value={t}>
                         {t}
                       </SelectItem>
