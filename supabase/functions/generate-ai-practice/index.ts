@@ -255,11 +255,11 @@ CRITICAL INSTRUCTIONS:
 // Generate flowchart image using Gemini (via Lovable AI Gateway)
 async function generateFlowchartImage(
   title: string, 
-  steps: Array<{label?: string; text?: string; isBlank?: boolean; questionNumber?: number}>
+  steps: Array<{label?: string; text?: string; isBlank?: boolean; questionNumber?: number}>,
+  geminiApiKey: string
 ): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    console.error('LOVABLE_API_KEY not configured');
+  if (!geminiApiKey) {
+    console.error('Gemini API key not provided for flowchart image generation');
     return null;
   }
 
@@ -289,40 +289,44 @@ Style requirements:
 - Easy to read text
 - Professional appearance suitable for a test`;
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview',
-        messages: [
-          { role: 'user', content: imagePrompt }
-        ],
-        modalities: ['image', 'text'],
-      }),
-    });
+    // Use direct Gemini API for image generation
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: imagePrompt }] }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE'],
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Flowchart image generation failed:', response.status, errorText);
       
-      // Log specific error types for debugging
       if (response.status === 429) {
         console.error('Rate limit exceeded for image generation');
-      } else if (response.status === 402) {
-        console.error('Payment required for image generation');
+      } else if (response.status === 403) {
+        console.error('API key may not have image generation permissions');
       }
       return null;
     }
 
     const data = await response.json();
-    const imageData = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
-    if (imageData && imageData.startsWith('data:image/')) {
-      console.log('Flowchart image generated successfully');
-      return imageData;
+    // Extract image from Gemini response format
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    for (const part of parts) {
+      if (part.inlineData?.mimeType?.startsWith('image/')) {
+        const base64Data = part.inlineData.data;
+        const mimeType = part.inlineData.mimeType;
+        console.log('Flowchart image generated successfully');
+        return `data:${mimeType};base64,${base64Data}`;
+      }
     }
     
     console.error('No image data in flowchart response');
@@ -333,15 +337,15 @@ Style requirements:
   }
 }
 
-// Generate chart/graph image for Writing Task 1 using Gemini (via Lovable AI Gateway)
+// Generate chart/graph image for Writing Task 1 using Gemini (direct API)
 async function generateWritingTask1Image(
   visualType: string,
   visualDescription: string,
-  dataDescription: string
+  dataDescription: string,
+  geminiApiKey: string
 ): Promise<string | null> {
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    console.error('LOVABLE_API_KEY not configured');
+  if (!geminiApiKey) {
+    console.error('Gemini API key not provided for Writing Task 1 image generation');
     return null;
   }
 
@@ -482,20 +486,20 @@ Style requirements:
 - Ultra high resolution, crisp graphics`;
     }
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash-image-preview',
-        messages: [
-          { role: 'user', content: imagePrompt }
-        ],
-        modalities: ['image', 'text'],
-      }),
-    });
+    // Use direct Gemini API for image generation
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp-image-generation:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: imagePrompt }] }],
+          generationConfig: {
+            responseModalities: ['TEXT', 'IMAGE'],
+          },
+        }),
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -504,11 +508,16 @@ Style requirements:
     }
 
     const data = await response.json();
-    const imageData = data.choices?.[0]?.message?.images?.[0]?.image_url?.url;
     
-    if (imageData && imageData.startsWith('data:image/')) {
-      console.log('Writing Task 1 image generated successfully');
-      return imageData;
+    // Extract image from Gemini response format
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    for (const part of parts) {
+      if (part.inlineData?.mimeType?.startsWith('image/')) {
+        const base64Data = part.inlineData.data;
+        const mimeType = part.inlineData.mimeType;
+        console.log('Writing Task 1 image generated successfully');
+        return `data:${mimeType};base64,${base64Data}`;
+      }
     }
     
     console.error('No image data in response');
@@ -1900,7 +1909,8 @@ serve(async (req) => {
           console.log('Generating flowchart image for reading FLOWCHART_COMPLETION...');
           const flowchartImageData = await generateFlowchartImage(
             parsed.flowchart_title || 'Process Flowchart',
-            parsed.flowchart_steps
+            parsed.flowchart_steps,
+            geminiApiKey
           );
           if (flowchartImageData) {
             const uploadedUrl = await uploadGeneratedImage(supabaseClient, flowchartImageData, testId, 'ai-practice-flowcharts');
@@ -2326,7 +2336,8 @@ Return ONLY valid JSON:
             imageBase64 = await generateWritingTask1Image(
               parsed.visual_type || visualType,
               parsed.visual_description,
-              parsed.data_description || ''
+              parsed.data_description || '',
+              geminiApiKey
             );
           }
           

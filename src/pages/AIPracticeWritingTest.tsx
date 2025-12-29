@@ -5,6 +5,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { 
   loadGeneratedTest, 
   savePracticeResult, 
@@ -24,6 +25,7 @@ import { WritingTestControls } from '@/components/writing/WritingTestControls';
 import { TestStartOverlay } from '@/components/common/TestStartOverlay';
 import { Clock, Send, PenTool, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 export default function AIPracticeWritingTest() {
   const { testId } = useParams<{ testId: string }>();
@@ -31,6 +33,7 @@ export default function AIPracticeWritingTest() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { incrementCompletion } = useTopicCompletions('writing');
+  const isMobile = useIsMobile();
   const [test, setTest] = useState<GeneratedTest | null>(null);
   const [submissionText1, setSubmissionText1] = useState('');
   const [submissionText2, setSubmissionText2] = useState('');
@@ -257,60 +260,125 @@ export default function AIPracticeWritingTest() {
     );
   };
 
-  // Render single task UI with IELTS-style formatting
-  const renderSingleTask = (task: GeneratedWritingSingleTask, submission: string, setSubmission: (s: string) => void, wordCount: number) => (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-      <Card className="overflow-hidden">
-        <CardContent className="p-6 space-y-4">
-          {/* Task header with official styling */}
-          <div className="border-b pb-3">
-            <h2 className="text-xl font-bold uppercase tracking-wide text-foreground">
-              WRITING {task.task_type === 'task1' ? 'TASK 1' : 'TASK 2'}
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1">
-              You should spend about {task.task_type === 'task1' ? '20' : '40'} minutes on this task.
-            </p>
-          </div>
-          
-          {/* Task 1: Show image first if available (as in real IELTS) */}
-          {task.task_type === 'task1' && task.image_base64 && (
-            <div className="flex justify-center py-4 border rounded-lg bg-muted/20">
-              <img 
-                src={task.image_base64.startsWith('data:') ? task.image_base64 : `data:image/png;base64,${task.image_base64}`} 
-                alt="Task visual" 
-                className="max-w-full max-h-[350px] object-contain rounded"
-              />
-            </div>
-          )}
-          
-          {/* Instruction with IELTS formatting */}
-          {formatIELTSInstruction(task.instruction, task.task_type as 'task1' | 'task2')}
-        </CardContent>
-      </Card>
+  // Render single task UI with IELTS-style formatting and resizable panels
+  const renderSingleTask = (task: GeneratedWritingSingleTask, submission: string, setSubmission: (s: string) => void, wordCount: number) => {
+    // Mobile view: stacked layout
+    if (isMobile) {
+      return (
+        <div className="space-y-4">
+          <Card className="overflow-hidden">
+            <CardContent className="p-4 space-y-4">
+              {/* Task header with official styling */}
+              <div className="border-b pb-3">
+                <h2 className="text-lg font-bold uppercase tracking-wide text-foreground">
+                  WRITING {task.task_type === 'task1' ? 'TASK 1' : 'TASK 2'}
+                </h2>
+                <p className="text-xs text-muted-foreground mt-1">
+                  You should spend about {task.task_type === 'task1' ? '20' : '40'} minutes on this task.
+                </p>
+              </div>
+              
+              {/* Task 1: Show image first if available (as in real IELTS) */}
+              {task.task_type === 'task1' && task.image_base64 && (
+                <div className="flex justify-center py-4 border rounded-lg bg-muted/20">
+                  <img 
+                    src={task.image_base64.startsWith('data:') ? task.image_base64 : `data:image/png;base64,${task.image_base64}`} 
+                    alt="Task visual" 
+                    className="max-w-full max-h-[250px] object-contain rounded"
+                  />
+                </div>
+              )}
+              
+              {/* Instruction with IELTS formatting */}
+              {formatIELTSInstruction(task.instruction, task.task_type as 'task1' | 'task2')}
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardContent className="p-6 flex flex-col h-full">
-          <div className="flex items-center justify-between mb-3 pb-2 border-b">
-            <Badge variant="secondary" className="text-sm px-3 py-1">
-              Word Count: {wordCount}
-            </Badge>
-            {wordCount >= task.word_limit_min && (
-              <Badge variant="default" className="bg-success text-success-foreground">
-                ✓ Minimum {task.word_limit_min} words met
-              </Badge>
+          <Card>
+            <CardContent className="p-4 flex flex-col">
+              <div className="flex items-center justify-between mb-3 pb-2 border-b">
+                <Badge variant="secondary" className="text-sm px-3 py-1">
+                  Words: {wordCount}
+                </Badge>
+                {wordCount >= task.word_limit_min && (
+                  <Badge variant="default" className="bg-success text-success-foreground text-xs">
+                    ✓ Min {task.word_limit_min}
+                  </Badge>
+                )}
+              </div>
+              <Textarea 
+                value={submission} 
+                onChange={(e) => setSubmission(e.target.value)} 
+                placeholder="Start writing your response here..." 
+                className="min-h-[300px] resize-none font-serif leading-relaxed"
+                style={{ fontSize }}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
+
+    // Desktop view: resizable side-by-side panels
+    return (
+      <ResizablePanelGroup 
+        direction="horizontal" 
+        className="min-h-[calc(100vh-180px)] rounded-lg border"
+      >
+        <ResizablePanel defaultSize={50} minSize={30}>
+          <div className="h-full overflow-auto p-6 space-y-4 bg-card">
+            {/* Task header with official styling */}
+            <div className="border-b pb-3">
+              <h2 className="text-xl font-bold uppercase tracking-wide text-foreground">
+                WRITING {task.task_type === 'task1' ? 'TASK 1' : 'TASK 2'}
+              </h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                You should spend about {task.task_type === 'task1' ? '20' : '40'} minutes on this task.
+              </p>
+            </div>
+            
+            {/* Task 1: Show image first if available (as in real IELTS) */}
+            {task.task_type === 'task1' && task.image_base64 && (
+              <div className="flex justify-center py-4 border rounded-lg bg-muted/20">
+                <img 
+                  src={task.image_base64.startsWith('data:') ? task.image_base64 : `data:image/png;base64,${task.image_base64}`} 
+                  alt="Task visual" 
+                  className="max-w-full max-h-[350px] object-contain rounded"
+                />
+              </div>
             )}
+            
+            {/* Instruction with IELTS formatting */}
+            {formatIELTSInstruction(task.instruction, task.task_type as 'task1' | 'task2')}
           </div>
-          <Textarea 
-            value={submission} 
-            onChange={(e) => setSubmission(e.target.value)} 
-            placeholder="Start writing your response here..." 
-            className="flex-1 min-h-[400px] resize-none font-serif leading-relaxed"
-            style={{ fontSize }}
-          />
-        </CardContent>
-      </Card>
-    </div>
-  );
+        </ResizablePanel>
+
+        <ResizableHandle withHandle />
+
+        <ResizablePanel defaultSize={50} minSize={30}>
+          <div className="h-full flex flex-col p-6 bg-card">
+            <div className="flex items-center justify-between mb-3 pb-2 border-b">
+              <Badge variant="secondary" className="text-sm px-3 py-1">
+                Word Count: {wordCount}
+              </Badge>
+              {wordCount >= task.word_limit_min && (
+                <Badge variant="default" className="bg-success text-success-foreground">
+                  ✓ Minimum {task.word_limit_min} words met
+                </Badge>
+              )}
+            </div>
+            <Textarea 
+              value={submission} 
+              onChange={(e) => setSubmission(e.target.value)} 
+              placeholder="Start writing your response here..." 
+              className="flex-1 min-h-[400px] resize-none font-serif leading-relaxed"
+              style={{ fontSize }}
+            />
+          </div>
+        </ResizablePanel>
+      </ResizablePanelGroup>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
