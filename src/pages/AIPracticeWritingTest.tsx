@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { loadGeneratedTest, savePracticeResult, GeneratedTest, PracticeResult } from '@/types/aiPractice';
 import { useToast } from '@/hooks/use-toast';
+import { useTopicCompletions } from '@/hooks/useTopicCompletions';
 import { supabase } from '@/integrations/supabase/client';
 import { describeApiError } from '@/lib/apiErrors';
 import { AILoadingScreen } from '@/components/common/AILoadingScreen';
@@ -17,6 +18,7 @@ export default function AIPracticeWritingTest() {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { incrementCompletion } = useTopicCompletions('writing');
   
   const [test, setTest] = useState<GeneratedTest | null>(null);
   const [submissionText, setSubmissionText] = useState('');
@@ -93,6 +95,10 @@ export default function AIPracticeWritingTest() {
       };
 
       savePracticeResult(result);
+      // Track topic completion
+      if (test.topic) {
+        incrementCompletion(test.topic);
+      }
       navigate(`/ai-practice/results/${test.id}`);
     } catch (err: any) {
       console.error('Evaluation error:', err);

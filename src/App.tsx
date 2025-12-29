@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "@/hooks/useAuth";
 
 import Index from "./pages/Index";
@@ -34,7 +34,7 @@ import AIPracticeTest from "./pages/AIPracticeTest";
 import AIPracticeResults from "./pages/AIPracticeResults";
 import AIPracticeWritingTest from "./pages/AIPracticeWritingTest";
 import AIPracticeSpeakingTest from "./pages/AIPracticeSpeakingTest";
-import AIPracticeSpeakingConfig from "./pages/AIPracticeSpeakingConfig";
+// AIPracticeSpeakingConfig removed - speaking config is now embedded in AIPractice
 import AIPracticeReadingTest from "./pages/AIPracticeReadingTest";
 import AIPracticeListeningTest from "./pages/AIPracticeListeningTest";
 import AIPracticeHistory from "./pages/AIPracticeHistory";
@@ -111,7 +111,7 @@ const App = () => (
             <Route path="/ai-practice/history" element={<AIPracticeHistory />} />
             <Route path="/ai-practice/test/:testId" element={<AIPracticeTest />} />
             <Route path="/ai-practice/writing/:testId" element={<AIPracticeWritingTest />} />
-            <Route path="/ai-practice/speaking" element={<AIPracticeSpeakingConfig />} />
+            <Route path="/ai-practice/speaking" element={<Navigate to="/ai-practice" replace />} />
             <Route path="/ai-practice/speaking/:testId" element={<AIPracticeSpeakingTest />} />
             <Route path="/ai-practice/reading/:testId" element={<AIPracticeReadingTest />} />
             <Route path="/ai-practice/listening/:testId" element={<AIPracticeListeningTest />} />

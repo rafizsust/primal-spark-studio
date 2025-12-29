@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { loadGeneratedTestAsync, GeneratedTest } from '@/types/aiPractice';
 import { useToast } from '@/hooks/use-toast';
+import { useTopicCompletions } from '@/hooks/useTopicCompletions';
 import { useSpeechSynthesis } from '@/hooks/useSpeechSynthesis';
 import { TestStartOverlay } from '@/components/common/TestStartOverlay';
 import { AILoadingScreen } from '@/components/common/AILoadingScreen';
@@ -70,6 +71,7 @@ export default function AIPracticeSpeakingTest() {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { incrementCompletion } = useTopicCompletions('speaking');
 
   // Test data
   const [test, setTest] = useState<GeneratedTest | null>(null);
@@ -481,6 +483,10 @@ export default function AIPracticeSpeakingTest() {
 
       setEvaluationStep(4);
       console.log('[AIPracticeSpeakingTest] Submission successful, model used:', data?.usedModel);
+      // Track topic completion
+      if (test?.topic) {
+        incrementCompletion(test.topic);
+      }
       setPhase('done');
       navigate(`/ai-practice/speaking/results/${testId}`);
     } catch (err: any) {
@@ -731,14 +737,14 @@ export default function AIPracticeSpeakingTest() {
   useEffect(() => {
     async function loadTest() {
       if (!testId) {
-        navigate('/ai-practice/speaking');
+        navigate('/ai-practice');
         return;
       }
 
       const loadedTest = await loadGeneratedTestAsync(testId);
       if (!loadedTest) {
         toast({ title: 'Test Not Found', variant: 'destructive' });
-        navigate('/ai-practice/speaking');
+        navigate('/ai-practice');
         return;
       }
 
@@ -846,7 +852,7 @@ export default function AIPracticeSpeakingTest() {
         questionType={test.questionType}
         difficulty={test.difficulty}
         onStart={startTest}
-        onCancel={() => navigate('/ai-practice/speaking')}
+        onCancel={() => navigate('/ai-practice')}
       />
     );
   }

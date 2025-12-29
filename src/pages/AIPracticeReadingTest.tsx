@@ -20,6 +20,7 @@ import { NoteSidebar } from '@/components/common/NoteSidebar';
 import { SubmitConfirmDialog } from '@/components/common/SubmitConfirmDialog';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
+import { useTopicCompletions } from '@/hooks/useTopicCompletions';
 import { 
   loadGeneratedTest,
   loadGeneratedTestAsync,
@@ -65,6 +66,7 @@ export default function AIPracticeReadingTest() {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { incrementCompletion } = useTopicCompletions('reading');
   
   const [test, setTest] = useState<GeneratedTest | null>(null);
   const [passages, setPassages] = useState<Passage[]>([]);
@@ -461,6 +463,10 @@ export default function AIPracticeReadingTest() {
     // Save result to Supabase
     if (user) {
       await savePracticeResultAsync(result, user.id, 'reading');
+      // Track topic completion
+      if (test.topic) {
+        incrementCompletion(test.topic);
+      }
     }
     navigate(`/ai-practice/results/${test.id}`);
   };

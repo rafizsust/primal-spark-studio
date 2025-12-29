@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/hooks/useAuth';
+import { useTopicCompletions } from '@/hooks/useTopicCompletions';
 import { 
   loadGeneratedTest,
   loadGeneratedTestAsync,
@@ -110,6 +111,7 @@ export default function AIPracticeListeningTest() {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { incrementCompletion } = useTopicCompletions('listening');
   
   const [test, setTest] = useState<GeneratedTest | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -446,6 +448,10 @@ export default function AIPracticeListeningTest() {
 
     if (user) {
       await savePracticeResultAsync(result, user.id, 'listening');
+      // Track topic completion
+      if (test.topic) {
+        incrementCompletion(test.topic);
+      }
     }
 
     navigate(`/ai-practice/results/${test.id}`);
