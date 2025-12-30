@@ -392,7 +392,7 @@ function LineGraphRenderer({
   );
 }
 
-// Pie Chart Renderer
+// Pie Chart Renderer (with percentage labels inside slices like IELTS)
 function PieChartRenderer({
   data,
   getColor,
@@ -400,11 +400,18 @@ function PieChartRenderer({
   data: IELTSChartData;
   getColor: (index: number, color?: string) => string;
 }) {
-  const items = data.data || [];
+  const items = (data.data || []).filter((d) => d?.label && typeof d.value === 'number');
+  if (items.length === 0) {
+    return (
+      <div className="text-center text-muted-foreground text-sm">
+        Pie chart data not available
+      </div>
+    );
+  }
   const total = items.reduce((sum, item) => sum + item.value, 0) || 1;
 
   // Calculate segment angles
-  let currentAngle = 0;
+  let currentAngle = -90; // start at 12 o'clock
   const segments = items.map((item, idx) => {
     const percentage = (item.value / total) * 100;
     const angle = (item.value / total) * 360;
@@ -412,6 +419,7 @@ function PieChartRenderer({
       ...item,
       percentage,
       startAngle: currentAngle,
+      midAngle: currentAngle + angle / 2,
       endAngle: currentAngle + angle,
       color: getColor(idx, item.color),
     };
@@ -419,23 +427,63 @@ function PieChartRenderer({
     return segment;
   });
 
+  const R = 80; // outer radius
+  const cx = 100;
+  const cy = 100;
+
+  // Arc path helper
+  const arc = (start: number, end: number, r: number) => {
+    const toRad = (deg: number) => (deg * Math.PI) / 180;
+    const x1 = cx + r * Math.cos(toRad(start));
+    const y1 = cy + r * Math.sin(toRad(start));
+    const x2 = cx + r * Math.cos(toRad(end));
+    const y2 = cy + r * Math.sin(toRad(end));
+    const largeArc = end - start > 180 ? 1 : 0;
+    return `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+  };
+
+  const labelPos = (angle: number, dist: number) => {
+    const rad = (angle * Math.PI) / 180;
+    return { x: cx + dist * Math.cos(rad), y: cy + dist * Math.sin(rad) };
+  };
+
   return (
     <div className="flex flex-col items-center gap-4">
-      {/* Pie visual using conic gradient */}
-      <div 
-        className="w-40 h-40 rounded-full"
-        style={{
-        background: `conic-gradient(${segments.map(
-            (s) => `${s.color} ${s.startAngle}deg ${s.endAngle}deg`
-          ).join(', ')})`,
-        }}
-      />
+      {/* SVG pie */}
+      <svg
+        viewBox="0 0 200 200"
+        className="w-44 h-44"
+        role="img"
+        aria-label={data.title || 'Pie chart'}
+      >
+        {segments.map((s, idx) => (
+          <g key={idx}>
+            <path d={arc(s.startAngle, s.endAngle, R)} fill={s.color} />
+            {/* Label if slice is big enough */}
+            {s.percentage >= 6 && (() => {
+              const pos = labelPos(s.midAngle, R * 0.65);
+              return (
+                <text
+                  x={pos.x}
+                  y={pos.y + 4}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fontWeight={600}
+                  fill="#fff"
+                >
+                  {s.percentage.toFixed(0)}%
+                </text>
+              );
+            })()}
+          </g>
+        ))}
+      </svg>
 
       {/* Legend */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-1">
         {segments.map((segment, idx) => (
           <div key={idx} className="flex items-center gap-2 text-xs">
-            <div 
+            <div
               className="w-3 h-3 rounded-sm flex-shrink-0"
               style={{ backgroundColor: segment.color }}
             />
