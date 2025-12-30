@@ -84,8 +84,6 @@ export function IELTSVisualRenderer({
   chartData,
   fallbackDescription = 'Visual data not available',
   className = '',
-  maxWidth = 600,
-  maxHeight = 400,
 }: IELTSVisualRendererProps) {
   
   // Show placeholder if no data
@@ -93,10 +91,10 @@ export function IELTSVisualRenderer({
     return (
       <div 
         className={cn(
-          'flex flex-col items-center justify-center p-6 bg-muted/30 border border-border rounded-lg text-center',
+          'flex flex-col items-center justify-center p-6 bg-muted/30 text-center w-full',
           className
         )}
-        style={{ maxWidth, minHeight: 200 }}
+        style={{ minHeight: 200 }}
       >
         <div className="text-muted-foreground text-sm mb-2">📊</div>
         <p className="text-sm text-muted-foreground">{fallbackDescription}</p>
@@ -135,12 +133,9 @@ export function IELTSVisualRenderer({
   };
 
   return (
-    <div 
-      className={cn('bg-background border border-border rounded-lg p-4', className)}
-      style={{ maxWidth, maxHeight: maxHeight === 400 ? 'auto' : maxHeight }}
-    >
+    <div className={cn('w-full', className)}>
       {chartData.title && (
-        <h3 className="text-base font-semibold text-center mb-1 text-foreground">
+        <h3 className="text-base font-bold text-center mb-2 text-foreground">
           {chartData.title}
         </h3>
       )}
@@ -158,11 +153,9 @@ export function IELTSVisualRenderer({
 function BarChartRenderer({ 
   data, 
   getColor,
-  isGrouped = false,
 }: { 
   data: IELTSChartData; 
   getColor: (index: number, color?: string) => string;
-  isGrouped?: boolean;
 }) {
   const items = (data.data || []).filter(d => d?.label && typeof d.value === 'number');
   if (items.length === 0) {
@@ -180,131 +173,125 @@ function BarChartRenderer({
   const tickStep = niceMax / tickCount;
   const ticks = Array.from({ length: tickCount + 1 }, (_, i) => i * tickStep);
 
-  const W = 560;
-  const H = 320;
-  const pad = { left: 50, right: 20, top: 20, bottom: 60 };
+  const W = 600;
+  const H = 380;
+  const pad = { left: 55, right: 20, top: 30, bottom: 70 };
   const innerW = W - pad.left - pad.right;
   const innerH = H - pad.top - pad.bottom;
 
-  const barWidth = Math.min(50, (innerW / items.length) * 0.6);
+  const barWidth = Math.min(60, (innerW / items.length) * 0.65);
   const barGap = (innerW - barWidth * items.length) / (items.length + 1);
 
   const xAt = (i: number) => pad.left + barGap + i * (barWidth + barGap) + barWidth / 2;
   const yAt = (v: number) => pad.top + (1 - v / niceMax) * innerH;
 
   return (
-    <div className="space-y-2">
+    <div className="w-full">
       {data.yAxisLabel && (
-        <div className="text-xs text-muted-foreground text-center">{data.yAxisLabel}</div>
+        <div className="text-xs text-muted-foreground text-center mb-1">{data.yAxisLabel}</div>
       )}
 
-      <div className="w-full overflow-x-auto">
-        <svg
-          className="block mx-auto"
-          viewBox={`0 0 ${W} ${H}`}
-          role="img"
-          aria-label={data.title || 'Bar chart'}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {/* Horizontal grid lines */}
-          {ticks.map((v, idx) => {
-            const y = yAt(v);
-            return (
-              <g key={idx}>
-                <line
-                  x1={pad.left}
-                  y1={y}
-                  x2={W - pad.right}
-                  y2={y}
-                  stroke="#333"
-                  strokeWidth={0.5}
-                />
-                <text
-                  x={pad.left - 8}
-                  y={y + 4}
-                  textAnchor="end"
-                  fontSize={11}
-                  fill="#666"
-                >
-                  {v}%
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Y-axis */}
-          <line
-            x1={pad.left}
-            y1={pad.top}
-            x2={pad.left}
-            y2={H - pad.bottom}
-            stroke="#333"
-            strokeWidth={1}
-          />
-          {/* X-axis */}
-          <line
-            x1={pad.left}
-            y1={H - pad.bottom}
-            x2={W - pad.right}
-            y2={H - pad.bottom}
-            stroke="#333"
-            strokeWidth={1}
-          />
-
-          {/* Bars */}
-          {items.map((item, idx) => {
-            const x = xAt(idx);
-            const barH = (item.value / niceMax) * innerH;
-            const y = H - pad.bottom - barH;
-            return (
-              <g key={idx}>
-                <rect
-                  x={x - barWidth / 2}
-                  y={y}
-                  width={barWidth}
-                  height={barH}
-                  fill={getColor(idx, item.color)}
-                />
-              </g>
-            );
-          })}
-
-          {/* X-axis labels */}
-          {items.map((item, idx) => {
-            const x = xAt(idx);
-            return (
+      <svg
+        className="w-full h-auto"
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={data.title || 'Bar chart'}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {/* Horizontal grid lines */}
+        {ticks.map((v, idx) => {
+          const y = yAt(v);
+          return (
+            <g key={idx}>
+              <line
+                x1={pad.left}
+                y1={y}
+                x2={W - pad.right}
+                y2={y}
+                stroke="#333"
+                strokeWidth={0.8}
+              />
               <text
-                key={idx}
-                x={x}
-                y={H - pad.bottom + 16}
-                textAnchor="middle"
-                fontSize={10}
+                x={pad.left - 10}
+                y={y + 4}
+                textAnchor="end"
+                fontSize={12}
                 fill="#333"
               >
-                {item.label.length > 12 ? item.label.slice(0, 11) + '…' : item.label}
+                {v}%
               </text>
-            );
-          })}
-        </svg>
-      </div>
+            </g>
+          );
+        })}
 
-      {/* Legend for grouped bars */}
-      {isGrouped && items.length > 0 && (
-        <div className="flex flex-wrap gap-4 justify-center">
-          {items.map((item, idx) => (
-            <div key={idx} className="flex items-center gap-2 text-xs">
-              <div
-                className="w-4 h-3"
-                style={{ backgroundColor: getColor(idx, item.color) }}
+        {/* Y-axis */}
+        <line
+          x1={pad.left}
+          y1={pad.top}
+          x2={pad.left}
+          y2={H - pad.bottom}
+          stroke="#333"
+          strokeWidth={1.5}
+        />
+        {/* X-axis */}
+        <line
+          x1={pad.left}
+          y1={H - pad.bottom}
+          x2={W - pad.right}
+          y2={H - pad.bottom}
+          stroke="#333"
+          strokeWidth={1.5}
+        />
+
+        {/* Bars */}
+        {items.map((item, idx) => {
+          const x = xAt(idx);
+          const barH = (item.value / niceMax) * innerH;
+          const y = H - pad.bottom - barH;
+          return (
+            <g key={idx}>
+              <rect
+                x={x - barWidth / 2}
+                y={y}
+                width={barWidth}
+                height={barH}
+                fill={getColor(idx, item.color)}
               />
-              <span className="text-foreground">{item.label}</span>
-            </div>
-          ))}
-        </div>
-      )}
+            </g>
+          );
+        })}
+
+        {/* X-axis labels */}
+        {items.map((item, idx) => {
+          const x = xAt(idx);
+          // Wrap long labels
+          const label = item.label;
+          const maxLen = 14;
+          const lines = label.length > maxLen 
+            ? [label.slice(0, maxLen), label.slice(maxLen, maxLen * 2)]
+            : [label];
+          
+          return (
+            <g key={idx}>
+              {lines.map((line, lineIdx) => (
+                <text
+                  key={lineIdx}
+                  x={x}
+                  y={H - pad.bottom + 18 + lineIdx * 14}
+                  textAnchor="middle"
+                  fontSize={11}
+                  fill="#333"
+                >
+                  {line.length > maxLen ? line.slice(0, maxLen - 1) + '…' : line}
+                </text>
+              ))}
+            </g>
+          );
+        })}
+      </svg>
 
       {data.xAxisLabel && (
-        <div className="text-xs text-muted-foreground text-center">{data.xAxisLabel}</div>
+        <div className="text-xs text-muted-foreground text-center mt-1">{data.xAxisLabel}</div>
       )}
     </div>
   );
@@ -346,9 +333,9 @@ function LineGraphRenderer({
     .sort((a, b) => (b.data?.length || 0) - (a.data?.length || 0))[0]
     ?.data.map((d) => String(d.x)) ?? [];
 
-  const W = 600;
-  const H = 340;
-  const pad = { left: 56, right: 130, top: 20, bottom: 50 };
+  const W = 650;
+  const H = 380;
+  const pad = { left: 60, right: 140, top: 30, bottom: 50 };
   const innerW = W - pad.left - pad.right;
   const innerH = H - pad.top - pad.bottom;
 
@@ -366,170 +353,168 @@ function LineGraphRenderer({
   }
 
   return (
-    <div className="space-y-3">
+    <div className="w-full">
       {data.yAxisLabel && (
-        <div className="text-xs text-muted-foreground text-center">
+        <div className="text-xs text-muted-foreground text-center mb-1">
           {data.yAxisLabel}
         </div>
       )}
 
-      <div className="w-full overflow-x-auto">
-        <svg
-          className="block mx-auto"
-          viewBox={`0 0 ${W} ${H}`}
-          role="img"
-          aria-label={data.title || 'Line graph'}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {/* Horizontal grid lines + Y-axis labels */}
-          {tickValues.map((v, idx) => {
-            const y = yAt(v);
-            return (
-              <g key={idx}>
-                <line
-                  x1={pad.left}
-                  y1={y}
-                  x2={W - pad.right}
-                  y2={y}
-                  stroke="#333"
-                  strokeWidth={0.5}
-                />
-                <text
-                  x={pad.left - 10}
-                  y={y + 4}
-                  textAnchor="end"
-                  fontSize={12}
-                  fill="#333"
-                >
-                  {v}%
-                </text>
-              </g>
-            );
-          })}
-
-          {/* Vertical grid lines at each X point */}
-          {xLabels.map((_, i) => {
-            const x = xAt(i);
-            return (
+      <svg
+        className="w-full h-auto"
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={data.title || 'Line graph'}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        {/* Horizontal grid lines + Y-axis labels */}
+        {tickValues.map((v, idx) => {
+          const y = yAt(v);
+          return (
+            <g key={idx}>
               <line
-                key={i}
-                x1={x}
-                y1={pad.top}
-                x2={x}
-                y2={H - pad.bottom}
-                stroke="#ccc"
-                strokeWidth={0.5}
+                x1={pad.left}
+                y1={y}
+                x2={W - pad.right}
+                y2={y}
+                stroke="#333"
+                strokeWidth={0.8}
               />
-            );
-          })}
-
-          {/* Axes */}
-          <line
-            x1={pad.left}
-            y1={pad.top}
-            x2={pad.left}
-            y2={H - pad.bottom}
-            stroke="#333"
-            strokeWidth={1.5}
-          />
-          <line
-            x1={pad.left}
-            y1={H - pad.bottom}
-            x2={W - pad.right}
-            y2={H - pad.bottom}
-            stroke="#333"
-            strokeWidth={1.5}
-          />
-
-          {/* X labels */}
-          {xLabels.map((label, i) => {
-            const x = xAt(i);
-            const y = H - pad.bottom + 22;
-            return (
               <text
-                key={i}
-                x={x}
-                y={y}
-                textAnchor="middle"
+                x={pad.left - 12}
+                y={y + 4}
+                textAnchor="end"
                 fontSize={12}
-                fontWeight={500}
                 fill="#333"
               >
-                {label}
+                {v}%
               </text>
-            );
-          })}
-
-          {/* Series - thick lines with distinct colors */}
-          {series.map((s, sIdx) => {
-            const color = getColor(sIdx, s.color);
-            const pts = s.data
-              .map((p, i) => {
-                const xi = xLabels.findIndex((x) => String(x) === String(p.x));
-                const xIndex = xi >= 0 ? xi : i;
-                return { x: xAt(xIndex), y: yAt(p.y), raw: p };
-              })
-              .sort((a, b) => a.x - b.x);
-
-            const d = pts
-              .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`)
-              .join(' ');
-
-            return (
-              <g key={sIdx}>
-                <path d={d} fill="none" stroke={color} strokeWidth={3} />
-                {pts.map((p, idx) => (
-                  <circle
-                    key={idx}
-                    cx={p.x}
-                    cy={p.y}
-                    r={5}
-                    fill={color}
-                    stroke="#fff"
-                    strokeWidth={2}
-                  >
-                    <title>{`${s.name}: ${p.raw.y}%`}</title>
-                  </circle>
-                ))}
-              </g>
-            );
-          })}
-
-          {/* Legend - on right side like official IELTS */}
-          {series.length > 0 && (
-            <g>
-              {series.map((s, idx) => {
-                const y = pad.top + 40 + idx * 28;
-                const color = getColor(idx, s.color);
-                return (
-                  <g key={idx}>
-                    <line
-                      x1={W - pad.right + 20}
-                      y1={y}
-                      x2={W - pad.right + 45}
-                      y2={y}
-                      stroke={color}
-                      strokeWidth={3}
-                    />
-                    <text
-                      x={W - pad.right + 50}
-                      y={y + 4}
-                      fontSize={12}
-                      fontWeight={500}
-                      fill={color}
-                    >
-                      {s.name}
-                    </text>
-                  </g>
-                );
-              })}
             </g>
-          )}
-        </svg>
-      </div>
+          );
+        })}
+
+        {/* Vertical grid lines at each X point */}
+        {xLabels.map((_, i) => {
+          const x = xAt(i);
+          return (
+            <line
+              key={i}
+              x1={x}
+              y1={pad.top}
+              x2={x}
+              y2={H - pad.bottom}
+              stroke="#aaa"
+              strokeWidth={0.5}
+            />
+          );
+        })}
+
+        {/* Axes */}
+        <line
+          x1={pad.left}
+          y1={pad.top}
+          x2={pad.left}
+          y2={H - pad.bottom}
+          stroke="#333"
+          strokeWidth={1.5}
+        />
+        <line
+          x1={pad.left}
+          y1={H - pad.bottom}
+          x2={W - pad.right}
+          y2={H - pad.bottom}
+          stroke="#333"
+          strokeWidth={1.5}
+        />
+
+        {/* X labels */}
+        {xLabels.map((label, i) => {
+          const x = xAt(i);
+          const y = H - pad.bottom + 22;
+          return (
+            <text
+              key={i}
+              x={x}
+              y={y}
+              textAnchor="middle"
+              fontSize={12}
+              fontWeight={500}
+              fill="#333"
+            >
+              {label}
+            </text>
+          );
+        })}
+
+        {/* Series - thick lines with distinct colors */}
+        {series.map((s, sIdx) => {
+          const color = getColor(sIdx, s.color);
+          const pts = s.data
+            .map((p, i) => {
+              const xi = xLabels.findIndex((x) => String(x) === String(p.x));
+              const xIndex = xi >= 0 ? xi : i;
+              return { x: xAt(xIndex), y: yAt(p.y), raw: p };
+            })
+            .sort((a, b) => a.x - b.x);
+
+          const d = pts
+            .map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`)
+            .join(' ');
+
+          return (
+            <g key={sIdx}>
+              <path d={d} fill="none" stroke={color} strokeWidth={3} />
+              {pts.map((p, idx) => (
+                <circle
+                  key={idx}
+                  cx={p.x}
+                  cy={p.y}
+                  r={5}
+                  fill={color}
+                  stroke="#fff"
+                  strokeWidth={2}
+                >
+                  <title>{`${s.name}: ${p.raw.y}%`}</title>
+                </circle>
+              ))}
+            </g>
+          );
+        })}
+
+        {/* Legend - on right side like official IELTS */}
+        {series.length > 0 && (
+          <g>
+            {series.map((s, idx) => {
+              const y = pad.top + 40 + idx * 28;
+              const color = getColor(idx, s.color);
+              return (
+                <g key={idx}>
+                  <line
+                    x1={W - pad.right + 20}
+                    y1={y}
+                    x2={W - pad.right + 45}
+                    y2={y}
+                    stroke={color}
+                    strokeWidth={3}
+                  />
+                  <text
+                    x={W - pad.right + 50}
+                    y={y + 4}
+                    fontSize={12}
+                    fontWeight={500}
+                    fill={color}
+                  >
+                    {s.name}
+                  </text>
+                </g>
+              );
+            })}
+          </g>
+        )}
+      </svg>
 
       {data.xAxisLabel && (
-        <div className="text-xs text-muted-foreground text-center">{data.xAxisLabel}</div>
+        <div className="text-xs text-muted-foreground text-center mt-1">{data.xAxisLabel}</div>
       )}
     </div>
   );
@@ -570,9 +555,9 @@ function PieChartRenderer({
     return segment;
   });
 
-  const R = 80; // outer radius
-  const cx = 100;
-  const cy = 100;
+  const R = 100; // outer radius
+  const cx = 120;
+  const cy = 120;
 
   // Arc path helper
   const arc = (start: number, end: number, r: number) => {
@@ -591,11 +576,15 @@ function PieChartRenderer({
   };
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-col items-center w-full">
+      {data.title && (
+        <h4 className="text-sm font-semibold text-center mb-3 text-foreground">{data.title}</h4>
+      )}
+      
       {/* SVG pie */}
       <svg
-        viewBox="0 0 200 200"
-        className="w-44 h-44"
+        viewBox="0 0 240 240"
+        className="w-56 h-56"
         role="img"
         aria-label={data.title || 'Pie chart'}
       >
@@ -610,8 +599,8 @@ function PieChartRenderer({
                   x={pos.x}
                   y={pos.y + 4}
                   textAnchor="middle"
-                  fontSize={11}
-                  fontWeight={600}
+                  fontSize={13}
+                  fontWeight={700}
                   fill="#fff"
                 >
                   {s.percentage.toFixed(0)}%
@@ -623,14 +612,14 @@ function PieChartRenderer({
       </svg>
 
       {/* Legend */}
-      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+      <div className="grid grid-cols-2 gap-x-6 gap-y-2 mt-4">
         {segments.map((segment, idx) => (
-          <div key={idx} className="flex items-center gap-2 text-xs">
+          <div key={idx} className="flex items-center gap-2 text-sm">
             <div
-              className="w-3 h-3 rounded-sm flex-shrink-0"
+              className="w-4 h-4 rounded-sm flex-shrink-0"
               style={{ backgroundColor: segment.color }}
             />
-            <span className="text-muted-foreground truncate">
+            <span className="text-foreground">
               {segment.label}: {segment.percentage.toFixed(0)}%
             </span>
           </div>
@@ -640,21 +629,21 @@ function PieChartRenderer({
   );
 }
 
-// Table Renderer
+// Table Renderer - IELTS style with colored header row and first column
 function TableRenderer({ data }: { data: IELTSChartData }) {
   const headers = data.headers || [];
   const rows = data.rows || [];
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-xs border-collapse">
+    <div className="w-full overflow-x-auto">
+      <table className="w-full text-sm border-collapse border border-border">
         {headers.length > 0 && (
           <thead>
             <tr>
               {headers.map((header, idx) => (
                 <th 
                   key={idx}
-                  className="bg-muted/50 border border-border px-2 py-1.5 text-left font-medium text-foreground"
+                  className="bg-slate-200 dark:bg-slate-700 border border-border px-3 py-2 text-left font-semibold text-foreground whitespace-nowrap"
                 >
                   {header}
                 </th>
@@ -669,8 +658,11 @@ function TableRenderer({ data }: { data: IELTSChartData }) {
                 <td 
                   key={cellIdx}
                   className={cn(
-                    'border border-border px-2 py-1.5',
-                    cell.isHeader ? 'bg-muted/30 font-medium' : 'bg-background'
+                    'border border-border px-3 py-2 whitespace-nowrap',
+                    cellIdx === 0 
+                      ? 'bg-slate-100 dark:bg-slate-800 font-medium' 
+                      : 'bg-background',
+                    cell.isHeader && 'bg-slate-100 dark:bg-slate-800 font-medium'
                   )}
                 >
                   {cell.value}
@@ -684,7 +676,7 @@ function TableRenderer({ data }: { data: IELTSChartData }) {
   );
 }
 
-// Process Diagram Renderer
+// Process Diagram Renderer - IELTS-style horizontal flow chart with arrows
 function ProcessDiagramRenderer({ data }: { data: IELTSChartData }) {
   const steps = (data.steps || []).filter((s) => s?.label);
 
@@ -696,161 +688,167 @@ function ProcessDiagramRenderer({ data }: { data: IELTSChartData }) {
     );
   }
 
-  // Prefer a circular/ring layout (closer to IELTS) when the diagram is a short sequence.
-  const useRing = steps.length >= 4 && steps.length <= 10;
-
-  if (!useRing) {
-    return (
-      <div className="flex flex-col gap-2">
-        {steps.map((step, idx) => (
-          <div key={idx} className="flex items-center gap-2">
-            <div className="flex-1 bg-muted/30 border border-border rounded-lg px-3 py-2">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
-                  {idx + 1}
-                </span>
-                <span className="text-sm font-medium text-foreground">{step.label}</span>
-              </div>
-              {step.description && (
-                <p className="text-xs text-muted-foreground mt-1 pl-8">{step.description}</p>
-              )}
-            </div>
-            {idx < steps.length - 1 && (
-              <div className="text-muted-foreground text-lg">↓</div>
-            )}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  const W = 760;
-  const H = 360;
-  const cx = W / 2;
-  const cy = H / 2;
-  const ringR = 120;
-  const nodeR = 18;
-
-  const angleFor = (i: number) => (-Math.PI / 2) + (i * 2 * Math.PI) / steps.length;
-  const nodeAt = (i: number) => {
-    const a = angleFor(i);
-    return { x: cx + ringR * Math.cos(a), y: cy + ringR * Math.sin(a) };
+  // For process diagrams, use a horizontal flow layout like real IELTS
+  // with boxes connected by arrows
+  const W = 800;
+  const boxH = 60;
+  const boxW = 140;
+  const arrowW = 40;
+  const rowGap = 80;
+  
+  // Calculate how many boxes fit per row
+  const boxesPerRow = Math.min(4, steps.length);
+  const rowCount = Math.ceil(steps.length / boxesPerRow);
+  const H = rowCount * (boxH + rowGap) + 60;
+  
+  const getBoxPosition = (idx: number) => {
+    const row = Math.floor(idx / boxesPerRow);
+    const col = idx % boxesPerRow;
+    // Alternate direction for snake pattern
+    const actualCol = row % 2 === 0 ? col : (boxesPerRow - 1 - col);
+    const x = 50 + actualCol * (boxW + arrowW);
+    const y = 40 + row * (boxH + rowGap);
+    return { x, y, row, col: actualCol };
   };
 
   return (
-    <div className="space-y-3">
-      <div className="w-full overflow-x-auto">
-        <svg
-          className="block mx-auto"
-          viewBox={`0 0 ${W} ${H}`}
-          role="img"
-          aria-label={data.title || 'Process diagram'}
-          preserveAspectRatio="xMidYMid meet"
-        >
-          {/* Ring */}
-          <circle
-            cx={cx}
-            cy={cy}
-            r={ringR}
-            fill="none"
-            stroke="hsl(var(--border))"
-            strokeOpacity={0.7}
-            strokeWidth={2}
-          />
+    <div className="w-full">
+      <svg
+        className="w-full h-auto"
+        viewBox={`0 0 ${W} ${H}`}
+        role="img"
+        aria-label={data.title || 'Process diagram'}
+        preserveAspectRatio="xMidYMid meet"
+      >
+        <defs>
+          <marker
+            id="process-arrow"
+            markerWidth="10"
+            markerHeight="10"
+            refX="9"
+            refY="5"
+            orient="auto"
+            markerUnits="strokeWidth"
+          >
+            <path d="M0,0 L0,10 L10,5 z" fill="#666" />
+          </marker>
+        </defs>
 
-          {/* Arrows */}
-          <defs>
-            <marker
-              id="arrow"
-              markerWidth="10"
-              markerHeight="10"
-              refX="8"
-              refY="3"
-              orient="auto"
-              markerUnits="strokeWidth"
-            >
-              <path d="M0,0 L0,6 L9,3 z" fill="hsl(var(--muted-foreground))" />
-            </marker>
-          </defs>
+        {steps.map((step, idx) => {
+          const pos = getBoxPosition(idx);
+          const nextPos = idx < steps.length - 1 ? getBoxPosition(idx + 1) : null;
 
-          {steps.map((_, i) => {
-            const a = nodeAt(i);
-            const b = nodeAt((i + 1) % steps.length);
-            // Draw a slightly inset chord so arrows don't overlap nodes
-            const inset = 12;
-            const dx = b.x - a.x;
-            const dy = b.y - a.y;
-            const len = Math.max(1, Math.sqrt(dx * dx + dy * dy));
-            const ax = a.x + (dx / len) * inset;
-            const ay = a.y + (dy / len) * inset;
-            const bx = b.x - (dx / len) * inset;
-            const by = b.y - (dy / len) * inset;
-            return (
-              <line
-                key={i}
-                x1={ax}
-                y1={ay}
-                x2={bx}
-                y2={by}
-                stroke="hsl(var(--muted-foreground))"
-                strokeOpacity={0.7}
-                strokeWidth={1.5}
-                markerEnd="url(#arrow)"
+          return (
+            <g key={idx}>
+              {/* Box */}
+              <rect
+                x={pos.x}
+                y={pos.y}
+                width={boxW}
+                height={boxH}
+                rx={8}
+                fill="#f8f9fa"
+                stroke="#333"
+                strokeWidth={2}
               />
-            );
-          })}
-
-          {/* Nodes + numbers */}
-          {steps.map((step, i) => {
-            const p = nodeAt(i);
-            return (
-              <g key={i}>
-                <circle
-                  cx={p.x}
-                  cy={p.y}
-                  r={nodeR}
-                  fill="hsl(var(--primary) / 0.12)"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2}
-                />
-                <text
-                  x={p.x}
-                  y={p.y + 5}
-                  textAnchor="middle"
-                  fontSize={12}
-                  fontWeight={700}
-                  fill="hsl(var(--primary))"
-                >
-                  {i + 1}
-                </text>
-                <title>{step.label}</title>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
-
-      {/* Step captions (IELTS-style, readable) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-        {steps.map((step, idx) => (
-          <div key={idx} className="bg-muted/20 border border-border rounded-lg px-3 py-2">
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded">
+              
+              {/* Step number circle */}
+              <circle
+                cx={pos.x + 20}
+                cy={pos.y + boxH / 2}
+                r={14}
+                fill="#3366CC"
+              />
+              <text
+                x={pos.x + 20}
+                y={pos.y + boxH / 2 + 5}
+                textAnchor="middle"
+                fontSize={12}
+                fontWeight={700}
+                fill="#fff"
+              >
                 {idx + 1}
-              </span>
-              <span className="text-sm font-medium text-foreground">{step.label}</span>
+              </text>
+
+              {/* Step label - wrap text */}
+              <foreignObject
+                x={pos.x + 38}
+                y={pos.y + 8}
+                width={boxW - 48}
+                height={boxH - 16}
+              >
+                <div 
+                  style={{ 
+                    fontSize: '11px', 
+                    lineHeight: '1.2',
+                    color: '#333',
+                    display: 'flex',
+                    alignItems: 'center',
+                    height: '100%',
+                    fontWeight: 500,
+                  }}
+                >
+                  {step.label}
+                </div>
+              </foreignObject>
+
+              {/* Arrow to next step */}
+              {nextPos && (
+                <>
+                  {pos.row === nextPos.row ? (
+                    // Horizontal arrow (same row)
+                    <line
+                      x1={pos.x + boxW + 4}
+                      y1={pos.y + boxH / 2}
+                      x2={nextPos.x - 4}
+                      y2={nextPos.y + boxH / 2}
+                      stroke="#666"
+                      strokeWidth={2}
+                      markerEnd="url(#process-arrow)"
+                    />
+                  ) : (
+                    // Vertical arrow (different row) + connecting path
+                    <path
+                      d={`M ${pos.x + boxW / 2} ${pos.y + boxH + 4} 
+                          L ${pos.x + boxW / 2} ${nextPos.y - 20}
+                          L ${nextPos.x + boxW / 2} ${nextPos.y - 20}
+                          L ${nextPos.x + boxW / 2} ${nextPos.y - 4}`}
+                      fill="none"
+                      stroke="#666"
+                      strokeWidth={2}
+                      markerEnd="url(#process-arrow)"
+                    />
+                  )}
+                </>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+
+      {/* Step descriptions below if any */}
+      {steps.some(s => s.description) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-4">
+          {steps.filter(s => s.description).map((step, idx) => (
+            <div key={idx} className="bg-muted/20 border border-border rounded px-3 py-2">
+              <div className="flex items-start gap-2">
+                <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-0.5 rounded mt-0.5">
+                  {steps.indexOf(step) + 1}
+                </span>
+                <div>
+                  <span className="text-sm font-medium text-foreground">{step.label}</span>
+                  <p className="text-xs text-muted-foreground mt-0.5">{step.description}</p>
+                </div>
+              </div>
             </div>
-            {step.description && (
-              <p className="text-xs text-muted-foreground mt-1 pl-8">{step.description}</p>
-            )}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-// Map Renderer (simplified list view)
+// Map Renderer - IELTS-style side-by-side comparison with visual elements
 function MapRenderer({ data }: { data: IELTSChartData }) {
   const mapData = data.mapData;
   
@@ -858,52 +856,143 @@ function MapRenderer({ data }: { data: IELTSChartData }) {
     return <div className="text-center text-muted-foreground text-sm">Map data not available</div>;
   }
 
-  const renderFeatures = (features: MapFeature[], year?: string) => (
-    <div className="flex-1 bg-muted/20 border border-border rounded-lg p-3">
-      {year && (
-        <div className="text-xs font-semibold text-primary mb-2 text-center">{year}</div>
-      )}
-      <div className="space-y-1">
-        {features.map((feature, idx) => (
-          <div key={idx} className="flex items-center gap-2 text-xs">
-            <span className={cn(
-              'w-2 h-2 rounded-sm',
-              feature.type === 'building' && 'bg-amber-500',
-              feature.type === 'road' && 'bg-slate-500',
-              feature.type === 'park' && 'bg-green-500',
-              feature.type === 'water' && 'bg-blue-500',
-              feature.type === 'other' && 'bg-gray-400',
-            )} />
-            <span className="text-foreground">{feature.label}</span>
-            {feature.position && (
-              <span className="text-muted-foreground">({feature.position})</span>
-            )}
+  const getFeatureColor = (type: string) => {
+    switch (type) {
+      case 'building': return '#D97706'; // amber
+      case 'road': return '#64748B'; // slate
+      case 'park': return '#16A34A'; // green
+      case 'water': return '#2563EB'; // blue
+      default: return '#9CA3AF'; // gray
+    }
+  };
+
+  const renderMapPanel = (features: MapFeature[], year: string) => {
+    // Create a simplified visual map representation
+    const W = 280;
+    const H = 300;
+    
+    return (
+      <div className="flex-1">
+        <div className="text-sm font-bold text-center mb-2 bg-slate-200 dark:bg-slate-700 py-2 rounded-t">
+          {year}
+        </div>
+        <div className="border border-border rounded-b bg-slate-50 dark:bg-slate-900 p-3">
+          {/* Visual map representation */}
+          <svg
+            viewBox={`0 0 ${W} ${H}`}
+            className="w-full h-auto mb-3"
+            style={{ minHeight: 180 }}
+          >
+            {/* Background grid pattern for map effect */}
+            <defs>
+              <pattern id="map-grid" patternUnits="userSpaceOnUse" width="20" height="20">
+                <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#e5e7eb" strokeWidth="0.5" />
+              </pattern>
+            </defs>
+            <rect width={W} height={H} fill="url(#map-grid)" />
+            
+            {/* Compass rose */}
+            <g transform="translate(240, 30)">
+              <circle r="18" fill="#fff" stroke="#333" strokeWidth="1" />
+              <text textAnchor="middle" y="-4" fontSize="10" fontWeight="bold" fill="#333">N</text>
+              <text textAnchor="middle" y="12" fontSize="8" fill="#666">S</text>
+              <text textAnchor="end" x="-6" y="4" fontSize="8" fill="#666">W</text>
+              <text textAnchor="start" x="6" y="4" fontSize="8" fill="#666">E</text>
+              <line x1="0" y1="-14" x2="0" y2="-8" stroke="#333" strokeWidth="2" />
+            </g>
+
+            {/* Position features on the map */}
+            {features.map((feature, idx) => {
+              // Calculate position based on index - spread across map
+              const row = Math.floor(idx / 3);
+              const col = idx % 3;
+              const x = 40 + col * 80;
+              const y = 60 + row * 70;
+              const color = getFeatureColor(feature.type);
+
+              return (
+                <g key={idx} transform={`translate(${x}, ${y})`}>
+                  {/* Feature shape based on type */}
+                  {feature.type === 'building' && (
+                    <rect x="-15" y="-15" width="30" height="30" fill={color} rx="2" />
+                  )}
+                  {feature.type === 'road' && (
+                    <rect x="-20" y="-5" width="40" height="10" fill={color} rx="1" />
+                  )}
+                  {feature.type === 'park' && (
+                    <circle r="18" fill={color} opacity="0.7" />
+                  )}
+                  {feature.type === 'water' && (
+                    <ellipse rx="22" ry="14" fill={color} opacity="0.6" />
+                  )}
+                  {feature.type === 'other' && (
+                    <circle r="12" fill={color} />
+                  )}
+                  
+                  {/* Label */}
+                  <text
+                    y={feature.type === 'road' ? 20 : 30}
+                    textAnchor="middle"
+                    fontSize="9"
+                    fontWeight="500"
+                    fill="#333"
+                  >
+                    {feature.label.length > 12 ? feature.label.slice(0, 11) + '…' : feature.label}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+
+          {/* Legend */}
+          <div className="border-t border-border pt-2 mt-2">
+            <div className="text-xs font-semibold mb-1">KEY</div>
+            <div className="flex flex-wrap gap-x-3 gap-y-1">
+              {['building', 'road', 'park', 'water'].map(type => {
+                const hasType = features.some(f => f.type === type);
+                if (!hasType) return null;
+                return (
+                  <div key={type} className="flex items-center gap-1 text-xs">
+                    <div 
+                      className="w-3 h-3 rounded-sm" 
+                      style={{ backgroundColor: getFeatureColor(type) }}
+                    />
+                    <span className="capitalize">{type}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        ))}
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   // Side-by-side comparison if before/after exists
   if (mapData.before && mapData.after) {
     return (
-      <div className="flex gap-4">
-        {renderFeatures(mapData.before.features, mapData.before.year)}
-        <div className="flex items-center text-muted-foreground">→</div>
-        {renderFeatures(mapData.after.features, mapData.after.year)}
+      <div className="w-full">
+        <div className="flex gap-4">
+          {renderMapPanel(mapData.before.features, mapData.before.year)}
+          {renderMapPanel(mapData.after.features, mapData.after.year)}
+        </div>
       </div>
     );
   }
 
   // Single map
   if (mapData.features) {
-    return renderFeatures(mapData.features);
+    return (
+      <div className="w-full max-w-md mx-auto">
+        {renderMapPanel(mapData.features, 'Location Map')}
+      </div>
+    );
   }
 
   return <div className="text-center text-muted-foreground text-sm">Map configuration not recognized</div>;
 }
 
-// Mixed Charts Renderer (IELTS-style: stacked vertically, not side-by-side)
+// Mixed Charts Renderer (IELTS-style: stacked vertically with proper spacing)
 function MixedChartsRenderer({
   data,
   getColor,
@@ -918,11 +1007,11 @@ function MixedChartsRenderer({
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-8 w-full">
       {charts.map((chart, idx) => (
-        <div key={idx} className="border border-border rounded-lg p-4 bg-white">
+        <div key={idx} className="w-full">
           {chart.title && (
-            <h4 className="text-sm font-semibold text-center mb-4 text-gray-800">{chart.title}</h4>
+            <h4 className="text-sm font-bold text-center mb-3 text-foreground">{chart.title}</h4>
           )}
           {chart.type === 'BAR_CHART' && <BarChartRenderer data={chart} getColor={getColor} />}
           {chart.type === 'LINE_GRAPH' && <LineGraphRenderer data={chart} getColor={getColor} />}
