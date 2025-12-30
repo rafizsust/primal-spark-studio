@@ -2318,66 +2318,102 @@ Return this EXACT JSON structure:
 
         // Use Gemini with JSON mode for stable, non-truncated output
         console.log(`Generating Task ${taskNum} with JSON mode...`);
-        
-        const response = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: writingPrompt }] }],
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 2048,
-                responseMimeType: 'application/json', // Force JSON mode
-              },
-            }),
+
+        const safeParseJson = (raw: string): any => {
+          // 1) Direct parse (best case)
+          try {
+            return JSON.parse(raw);
+          } catch {
+            // 2) Extract JSON from mixed content (code fences etc.)
+            const extracted = extractJsonFromResponse(raw);
+            return JSON.parse(extracted);
           }
-        );
+        };
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error(`Task ${taskNum} generation failed:`, response.status, errorText);
-          throw new Error(`Failed to generate Task ${taskNum}: ${response.status}`);
+        const baseMaxOutputTokens = 2048;
+        const maxAttempts = 3;
+        let lastErr: unknown = null;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+          const maxOutputTokens = attempt === 0 ? baseMaxOutputTokens : baseMaxOutputTokens * 2;
+
+          const response = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+            {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: writingPrompt }] }],
+                generationConfig: {
+                  // Lower temperature improves schema adherence for strict JSON
+                  temperature: 0.2,
+                  maxOutputTokens,
+                  responseMimeType: 'application/json', // Force JSON mode
+                },
+              }),
+            }
+          );
+
+          if (!response.ok) {
+            const errorText = await response.text();
+            console.error(`Task ${taskNum} generation failed:`, response.status, errorText);
+            throw new Error(`Failed to generate Task ${taskNum}: ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          // Track token usage
+          const usageMetadata = data.usageMetadata;
+          if (usageMetadata) {
+            const promptTokens = usageMetadata.promptTokenCount || 0;
+            const candidateTokens = usageMetadata.candidatesTokenCount || 0;
+            writingTotalTokensUsed += promptTokens + candidateTokens;
+            console.log(`Task ${taskNum} tokens - Prompt: ${promptTokens}, Output: ${candidateTokens}`);
+          }
+
+          const finishReason = data.candidates?.[0]?.finishReason;
+
+          const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!resultText) {
+            lastErr = new Error(`Empty response for Task ${taskNum}`);
+            console.error(lastErr);
+            continue;
+          }
+
+          console.log(`Task ${taskNum} response length: ${resultText.length} chars (attempt ${attempt + 1}/${maxAttempts}, finishReason=${finishReason || 'unknown'})`);
+
+          try {
+            const parsed = safeParseJson(resultText);
+
+            return {
+              id: crypto.randomUUID(),
+              task_type: isTask1 ? 'task1' : 'task2',
+              instruction: parsed.instruction,
+              image_description: parsed.visual_description || parsed.instruction, // Fallback
+              chartData: parsed.visualData || null, // Direct from combined response
+              visual_type: parsed.visual_type,
+              essay_type: parsed.essay_type,
+              word_limit_min: isTask1 ? 150 : 250,
+              word_limit_max: isTask1 ? 200 : 350,
+            };
+          } catch (e) {
+            lastErr = e;
+            const preview = resultText?.substring(0, 500);
+            console.error(`Failed to parse Task ${taskNum} JSON (attempt ${attempt + 1}/${maxAttempts}):`, e, preview);
+
+            // If the model output looks truncated, retry with a larger token budget.
+            // Otherwise, retry once more anyway (models sometimes self-correct on retry).
+            const looksTruncated = !resultText.trim().endsWith('}') || finishReason === 'MAX_TOKENS';
+            if (!looksTruncated && attempt >= 1) {
+              break;
+            }
+
+            continue;
+          }
         }
 
-        const data = await response.json();
-        
-        // Track token usage
-        const usageMetadata = data.usageMetadata;
-        if (usageMetadata) {
-          const promptTokens = usageMetadata.promptTokenCount || 0;
-          const candidateTokens = usageMetadata.candidatesTokenCount || 0;
-          writingTotalTokensUsed += promptTokens + candidateTokens;
-          console.log(`Task ${taskNum} tokens - Prompt: ${promptTokens}, Output: ${candidateTokens}`);
-        }
-        
-        const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!resultText) {
-          throw new Error(`Empty response for Task ${taskNum}`);
-        }
-        
-        console.log(`Task ${taskNum} response length: ${resultText.length} chars`);
-
-        try {
-          // With JSON mode, the response should be valid JSON directly
-          const parsed = JSON.parse(resultText);
-          
-          return {
-            id: crypto.randomUUID(),
-            task_type: isTask1 ? 'task1' : 'task2',
-            instruction: parsed.instruction,
-            image_description: parsed.visual_description || parsed.instruction, // Fallback
-            chartData: parsed.visualData || null, // Direct from combined response
-            visual_type: parsed.visual_type,
-            essay_type: parsed.essay_type,
-            word_limit_min: isTask1 ? 150 : 250,
-            word_limit_max: isTask1 ? 200 : 350,
-          };
-        } catch (e) {
-          console.error(`Failed to parse Task ${taskNum} JSON:`, e, resultText?.substring(0, 500));
-          throw new Error(`Failed to parse Task ${taskNum} content`);
-        }
+        console.error(`Failed to parse Task ${taskNum} after ${maxAttempts} attempts:`, lastErr);
+        throw new Error(`Failed to parse Task ${taskNum} content`);
       }
 
       try {
