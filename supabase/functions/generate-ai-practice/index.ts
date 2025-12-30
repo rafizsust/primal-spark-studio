@@ -354,36 +354,37 @@ function extractJsonFromResponse(text: string): string {
   throw new Error('Could not extract valid JSON from AI response');
 }
 
-// Generate image using Google's Imagen model (free with user's Gemini API key)
+// Generate image using Gemini's native image generation (gemini-2.5-flash-image model)
+// This uses generateContent with responseModalities which is FREE with user's API key
 async function generateImageWithGemini(prompt: string, geminiApiKey: string): Promise<string | null> {
   if (!geminiApiKey) {
     console.error('Gemini API key not provided for image generation');
     return null;
   }
 
-  // Try multiple Imagen models in order of preference
-  const imagenModels = [
-    'imagen-3.0-generate-001',
-    'imagen-3.0-generate-002',
-    'imagegeneration@006'
+  // Try Gemini image generation models in order of preference
+  const imageModels = [
+    'gemini-2.0-flash-exp-image-generation',  // Experimental model for image gen
+    'gemini-2.0-flash-preview-image-generation', // Preview model
   ];
 
-  for (const model of imagenModels) {
+  for (const model of imageModels) {
     try {
       console.log(`Trying image generation with model: ${model}...`);
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${geminiApiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            instances: [{ prompt }],
-            parameters: {
-              sampleCount: 1,
-              aspectRatio: "1:1"
+            contents: [{
+              parts: [{ text: prompt }]
+            }],
+            generationConfig: {
+              responseModalities: ["TEXT", "IMAGE"]
             }
           }),
         }
@@ -398,29 +399,37 @@ async function generateImageWithGemini(prompt: string, geminiApiKey: string): Pr
           continue;
         }
         
-        // For rate limits, wait and retry with same model once
+        // For rate limits, wait and retry
         if (response.status === 429) {
           console.log('Rate limited, waiting 5 seconds before retry...');
           await new Promise(resolve => setTimeout(resolve, 5000));
           
           const retryResponse = await fetch(
-            `https://generativelanguage.googleapis.com/v1beta/models/${model}:predict?key=${geminiApiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiApiKey}`,
             {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                instances: [{ prompt }],
-                parameters: { sampleCount: 1, aspectRatio: "1:1" }
+                contents: [{
+                  parts: [{ text: prompt }]
+                }],
+                generationConfig: {
+                  responseModalities: ["TEXT", "IMAGE"]
+                }
               }),
             }
           );
           
           if (retryResponse.ok) {
             const retryData = await retryResponse.json();
-            const imageBytes = retryData.predictions?.[0]?.bytesBase64Encoded;
-            if (imageBytes) {
-              console.log(`Image generated successfully with ${model} (after retry)`);
-              return `data:image/png;base64,${imageBytes}`;
+            // Extract image from response - check for inlineData in parts
+            const parts = retryData.candidates?.[0]?.content?.parts || [];
+            for (const part of parts) {
+              if (part.inlineData?.data) {
+                const mimeType = part.inlineData.mimeType || 'image/png';
+                console.log(`Image generated successfully with ${model} (after retry)`);
+                return `data:${mimeType};base64,${part.inlineData.data}`;
+              }
             }
           }
         }
@@ -429,11 +438,15 @@ async function generateImageWithGemini(prompt: string, geminiApiKey: string): Pr
       }
 
       const data = await response.json();
-      const imageBytes = data.predictions?.[0]?.bytesBase64Encoded;
       
-      if (imageBytes) {
-        console.log(`Image generated successfully with ${model}`);
-        return `data:image/png;base64,${imageBytes}`;
+      // Extract image from response - Gemini returns images in parts[].inlineData
+      const parts = data.candidates?.[0]?.content?.parts || [];
+      for (const part of parts) {
+        if (part.inlineData?.data) {
+          const mimeType = part.inlineData.mimeType || 'image/png';
+          console.log(`Image generated successfully with ${model}`);
+          return `data:${mimeType};base64,${part.inlineData.data}`;
+        }
       }
       
       console.log(`No image data from ${model}, trying next...`);
@@ -443,7 +456,7 @@ async function generateImageWithGemini(prompt: string, geminiApiKey: string): Pr
     }
   }
 
-  console.error('All Imagen models failed for image generation');
+  console.error('All Gemini image models failed for image generation');
   return null;
 }
 
@@ -2112,7 +2125,7 @@ serve(async (req) => {
         let mapImageUrl: string | undefined;
         if (parsed.map_description && parsed.map_labels) {
           console.log('Generating map image for reading MAP_LABELING...');
-          const mapImageData = await generateMapImage(parsed.map_description, parsed.map_labels);
+          const mapImageData = await generateMapImage(parsed.map_description, parsed.map_labels, undefined, geminiApiKey);
           if (mapImageData) {
             const uploadedUrl = await uploadGeneratedImage(supabaseClient, mapImageData, testId, 'ai-practice-maps');
             if (uploadedUrl) {
@@ -2313,7 +2326,7 @@ serve(async (req) => {
         let mapImageUrl: string | undefined;
         if (parsed.map_description && parsed.map_labels) {
           console.log('Generating map image for MAP_LABELING...');
-          const mapImageData = await generateMapImage(parsed.map_description, parsed.map_labels, parsed.landmarks);
+          const mapImageData = await generateMapImage(parsed.map_description, parsed.map_labels, parsed.landmarks, geminiApiKey);
           if (mapImageData) {
             const uploadedUrl = await uploadGeneratedImage(supabaseClient, mapImageData, testId, 'ai-practice-maps');
             if (uploadedUrl) {
