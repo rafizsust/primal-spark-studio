@@ -1504,6 +1504,7 @@ export type Database = {
         Args: { p_cost: number; p_user_id: string }
         Returns: Json
       }
+      cleanup_old_data: { Args: never; Returns: Json }
       get_credit_status: { Args: { p_user_id: string }; Returns: Json }
       has_active_subscription: { Args: { p_user_id: string }; Returns: boolean }
       increment_topic_completion: {

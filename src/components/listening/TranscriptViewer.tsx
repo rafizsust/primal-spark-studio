@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, ChevronDown, ChevronUp, User, Users } from 'lucide-react';
+import { FileText, ChevronDown, ChevronUp, User, Users, BookOpen } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { AddToFlashcardButton } from '@/components/common/AddToFlashcardButton';
 
 interface TranscriptLine {
   speaker: string;
@@ -95,6 +96,31 @@ function parseTranscript(transcript: string): TranscriptLine[] {
 
 function TranscriptPart({ transcript, partNumber }: { transcript: string; partNumber: number }) {
   const lines = parseTranscript(transcript);
+  const [selectedText, setSelectedText] = useState<string>('');
+  const [showFlashcardButton, setShowFlashcardButton] = useState(false);
+  const [buttonPosition, setButtonPosition] = useState({ x: 0, y: 0 });
+  
+  const handleMouseUp = useCallback(() => {
+    const selection = window.getSelection();
+    const text = selection?.toString().trim();
+    
+    if (text && text.length > 1 && text.length < 100) {
+      setSelectedText(text);
+      const range = selection?.getRangeAt(0);
+      if (range) {
+        const rect = range.getBoundingClientRect();
+        setButtonPosition({ x: rect.left + rect.width / 2, y: rect.top - 40 });
+        setShowFlashcardButton(true);
+      }
+    } else {
+      setShowFlashcardButton(false);
+    }
+  }, []);
+
+  const handleFlashcardSuccess = useCallback(() => {
+    setShowFlashcardButton(false);
+    window.getSelection()?.removeAllRanges();
+  }, []);
   
   if (lines.length === 0) {
     return (
@@ -109,7 +135,26 @@ function TranscriptPart({ transcript, partNumber }: { transcript: string; partNu
   const uniqueSpeakers = [...new Set(lines.map(l => l.speaker))];
   
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 relative" onMouseUp={handleMouseUp}>
+      {/* Floating Add to Flashcard Button */}
+      {showFlashcardButton && selectedText && (
+        <div 
+          className="fixed z-50 animate-in fade-in-0 zoom-in-95"
+          style={{
+            left: `${buttonPosition.x}px`,
+            top: `${buttonPosition.y}px`,
+            transform: 'translateX(-50%)'
+          }}
+        >
+          <AddToFlashcardButton 
+            word={selectedText}
+            variant="button"
+            className="shadow-lg"
+            onSuccess={handleFlashcardSuccess}
+          />
+        </div>
+      )}
+      
       {/* Speaker Legend */}
       {uniqueSpeakers.length > 1 && (
         <div className="flex flex-wrap gap-2 pb-3 border-b border-border/50">
@@ -159,6 +204,12 @@ function TranscriptPart({ transcript, partNumber }: { transcript: string; partNu
             </div>
           );
         })}
+      </div>
+      
+      {/* Tip for adding to flashcards */}
+      <div className="flex items-center justify-center gap-2 pt-2 text-xs text-muted-foreground">
+        <BookOpen size={12} />
+        <span>Select any word or phrase to add to flashcards</span>
       </div>
     </div>
   );

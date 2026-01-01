@@ -23,6 +23,7 @@ import { cn } from '@/lib/utils';
 import { toast } from '@/hooks/use-toast';
 import { describeApiError } from '@/lib/apiErrors';
 import { TranscriptViewer } from '@/components/listening/TranscriptViewer';
+import { AddToFlashcardButton } from '@/components/common/AddToFlashcardButton';
 
 interface QuestionResult {
   questionNumber: number;
@@ -761,6 +762,13 @@ Thank you for looking into this.
                             <Flag size={14} />
                             Report Issue
                           </Button>
+                          <AddToFlashcardButton 
+                            word={result.questionText.slice(0, 50)}
+                            meaning={result.correctAnswer}
+                            example={`Question ${result.questionNumber}: ${result.questionText}`}
+                            variant="button"
+                            className="gap-1"
+                          />
                         </div>
                       )}
                     </div>

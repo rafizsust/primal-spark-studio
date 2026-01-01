@@ -3,6 +3,7 @@ import { Plus, X, Languages, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { AddToFlashcardButton } from '@/components/common/AddToFlashcardButton';
 
 interface WordSelectionToolbarProps {
   position: { x: number; y: number };
@@ -81,6 +82,11 @@ export function WordSelectionToolbar({ position, word, onAdd, onClose }: WordSel
             )}
             Translate
           </Button>
+          <AddToFlashcardButton 
+            word={word}
+            variant="icon"
+            className="h-8 w-8"
+          />
           <Button
             size="icon"
             variant="ghost"
