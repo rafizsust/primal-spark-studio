@@ -145,7 +145,7 @@ export function FlashcardQuickPractice({ className }: FlashcardQuickPracticeProp
         </div>
       </div>
 
-      {/* Flashcard */}
+      {/* Flashcard - Shows WORD first, reveals MEANING on tap */}
       <div 
         className="relative h-36 cursor-pointer perspective-1000 mb-3"
         onClick={() => setIsFlipped(!isFlipped)}
@@ -154,7 +154,7 @@ export function FlashcardQuickPractice({ className }: FlashcardQuickPracticeProp
           "absolute inset-0 transition-transform duration-300 transform-style-3d",
           isFlipped && "rotate-y-180"
         )}>
-          {/* Front */}
+          {/* Front - Shows the WORD (key) */}
           <Card className={cn(
             "absolute inset-0 backface-hidden flex items-center justify-center overflow-hidden",
             "bg-gradient-to-br from-primary/5 to-accent/5 border-primary/20"
@@ -171,17 +171,18 @@ export function FlashcardQuickPractice({ className }: FlashcardQuickPracticeProp
                 {currentCard.status === 'learning' ? <Brain className="w-2.5 h-2.5 mr-1" /> : null}
                 {currentCard.status}
               </Badge>
-              <p className="text-base font-bold line-clamp-2 px-2">{currentCard.word}</p>
-              <p className="text-[10px] text-muted-foreground mt-1">Tap to reveal</p>
+              <p className="text-lg font-bold line-clamp-2 px-2">{currentCard.word}</p>
+              <p className="text-[10px] text-muted-foreground mt-2">Tap to reveal meaning</p>
             </CardContent>
           </Card>
 
-          {/* Back */}
+          {/* Back - Shows the MEANING (value) */}
           <Card className={cn(
             "absolute inset-0 backface-hidden rotate-y-180 flex items-center justify-center overflow-hidden",
             "bg-gradient-to-br from-accent/5 to-primary/5 border-accent/20"
           )}>
-            <CardContent className="text-center p-3 w-full h-full flex items-center justify-center overflow-y-auto">
+            <CardContent className="text-center p-3 w-full h-full flex flex-col items-center justify-center overflow-y-auto">
+              <p className="text-xs text-muted-foreground mb-1">{currentCard.word}</p>
               <p className="text-sm font-medium line-clamp-4 px-2">{currentCard.meaning}</p>
             </CardContent>
           </Card>
