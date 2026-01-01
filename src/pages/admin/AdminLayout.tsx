@@ -25,6 +25,8 @@ const sidebarItems = [
   { label: 'Writing Tests', href: '/admin/writing', icon: PenTool },
   { label: 'Speaking Tests', href: '/admin/speaking', icon: Mic },
   { label: 'Promotion Codes', href: '/admin/promotions', icon: Gift },
+  { label: 'Test Bank', href: '/admin/testbank', icon: FileText },
+  { label: 'Settings', href: '/admin/settings', icon: Menu },
 ];
 
 export default function AdminLayout() {

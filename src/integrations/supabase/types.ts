@@ -1349,6 +1349,11 @@ export type Database = {
     }
     Functions: {
       can_user_submit: { Args: { p_user_id: string }; Returns: boolean }
+      check_and_reserve_credits: {
+        Args: { p_cost: number; p_user_id: string }
+        Returns: Json
+      }
+      get_credit_status: { Args: { p_user_id: string }; Returns: Json }
       has_active_subscription: { Args: { p_user_id: string }; Returns: boolean }
       increment_topic_completion: {
         Args: { p_module: string; p_topic: string; p_user_id: string }
@@ -1356,6 +1361,10 @@ export type Database = {
       }
       is_admin: { Args: { check_user_id: string }; Returns: boolean }
       is_promotion_active: { Args: never; Returns: boolean }
+      refund_credits: {
+        Args: { p_cost: number; p_user_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       subscription_status: "active" | "cancelled" | "expired" | "pending"

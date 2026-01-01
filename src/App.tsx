@@ -51,6 +51,8 @@ import WritingTestsAdmin from "./pages/admin/WritingTestsAdmin";
 import WritingTestEditor from "./pages/admin/WritingTestEditor";
 import SpeakingTestsAdmin from "./pages/admin/SpeakingTestsAdmin";
 import SpeakingTestEditor from "./pages/admin/SpeakingTestEditor";
+import AdminSettings from "./pages/admin/AdminSettings";
+import TestBankAdmin from "./pages/admin/TestBankAdmin";
 
 
 const queryClient = new QueryClient({
@@ -135,6 +137,8 @@ const App = () => (
               <Route path="speaking/new" element={<SpeakingTestEditor />} />
               <Route path="speaking/edit/:testId" element={<SpeakingTestEditor />} />
               <Route path="promotions" element={<PromotionCodesAdmin />} />
+              <Route path="testbank" element={<TestBankAdmin />} />
+              <Route path="settings" element={<AdminSettings />} />
             </Route>
             
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
