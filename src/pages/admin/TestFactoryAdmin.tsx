@@ -27,6 +27,8 @@ import {
   BookOpen,
   Mic,
   PenLine,
+  Trash2,
+  RotateCcw,
 } from "lucide-react";
 import { 
   READING_TOPICS, 
@@ -34,6 +36,17 @@ import {
   WRITING_TASK2_TOPICS, 
   SPEAKING_TOPICS_FULL 
 } from "@/lib/ieltsTopics";
+import GeneratedTestPreview from "@/components/admin/GeneratedTestPreview";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface GenerationJob {
   id: string;
@@ -60,6 +73,8 @@ interface GeneratedTest {
   question_type: string;
   is_published: boolean;
   created_at: string;
+  content_payload: Record<string, unknown>;
+  module: string;
 }
 
 const MODULES = [
@@ -152,6 +167,12 @@ export default function TestFactoryAdmin() {
   const [selectedJob, setSelectedJob] = useState<GenerationJob | null>(null);
   const [jobTests, setJobTests] = useState<GeneratedTest[]>([]);
   const [loadingJobs, setLoadingJobs] = useState(true);
+  
+  // Preview & Delete state
+  const [previewTest, setPreviewTest] = useState<GeneratedTest | null>(null);
+  const [deleteTestId, setDeleteTestId] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [retryingTestId, setRetryingTestId] = useState<string | null>(null);
 
   // Reset topic and question type when module changes
   useEffect(() => {
@@ -329,6 +350,79 @@ export default function TestFactoryAdmin() {
       }
     } catch (error) {
       toast.error("Failed to update tests");
+    }
+  };
+
+  const deleteTest = async (testId: string) => {
+    setIsDeleting(true);
+    try {
+      const { error } = await supabase
+        .from("generated_test_audio")
+        .delete()
+        .eq("id", testId);
+
+      if (error) throw error;
+      
+      toast.success("Test deleted");
+      setDeleteTestId(null);
+      if (selectedJob) {
+        fetchJobDetails(selectedJob.id);
+      }
+    } catch (error) {
+      console.error("Delete error:", error);
+      toast.error("Failed to delete test");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const retryTest = async (test: GeneratedTest) => {
+    if (!selectedJob) return;
+    
+    setRetryingTestId(test.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/bulk-generate-tests`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            module: selectedJob.module,
+            topic: selectedJob.topic,
+            difficulty: selectedJob.difficulty,
+            quantity: 1,
+            questionType: test.question_type || selectedJob.question_type,
+            monologue: selectedJob.monologue,
+          }),
+        }
+      );
+
+      const data = await response.json();
+      if (data.success) {
+        toast.success("Retry started - new test will appear shortly");
+        // Delete the failed test
+        await supabase
+          .from("generated_test_audio")
+          .delete()
+          .eq("id", test.id);
+        
+        if (selectedJob) {
+          setTimeout(() => fetchJobDetails(selectedJob.id), 2000);
+        }
+      } else {
+        toast.error(data.error || "Failed to retry");
+      }
+    } catch (error) {
+      console.error("Retry error:", error);
+      toast.error("Failed to retry test generation");
+    } finally {
+      setRetryingTestId(null);
     }
   };
 
@@ -688,13 +782,18 @@ export default function TestFactoryAdmin() {
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {jobTests.map((test, index) => (
-                    <Card key={test.id}>
+                    <Card key={test.id} className={test.status === "failed" ? "border-destructive/50" : ""}>
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between mb-2">
                           <span className="font-medium">Test #{index + 1}</span>
-                          <Badge variant={test.is_published ? "default" : "secondary"}>
-                            {test.is_published ? "Published" : "Draft"}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            {test.status === "failed" && (
+                              <Badge variant="destructive">Failed</Badge>
+                            )}
+                            <Badge variant={test.is_published ? "default" : "secondary"}>
+                              {test.is_published ? "Published" : "Draft"}
+                            </Badge>
+                          </div>
                         </div>
                         <div className="text-sm text-muted-foreground mb-3">
                           {test.voice_id && <p>Voice: {test.voice_id}</p>}
@@ -705,20 +804,50 @@ export default function TestFactoryAdmin() {
                           <p>Status: {test.status}</p>
                         </div>
                         <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="flex-1"
-                            onClick={() => publishTests([test.id], !test.is_published)}
-                          >
-                            {test.is_published ? "Unpublish" : "Publish"}
-                          </Button>
+                          {test.status !== "failed" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => publishTests([test.id], !test.is_published)}
+                            >
+                              {test.is_published ? "Unpublish" : "Publish"}
+                            </Button>
+                          )}
+                          {test.status === "failed" && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="flex-1"
+                              onClick={() => retryTest(test)}
+                              disabled={retryingTestId === test.id}
+                            >
+                              {retryingTestId === test.id ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <>
+                                  <RotateCcw className="h-4 w-4 mr-1" />
+                                  Retry
+                                </>
+                              )}
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-8 w-8"
+                            onClick={() => setPreviewTest(test)}
+                            disabled={test.status === "failed"}
                           >
                             <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive"
+                            onClick={() => setDeleteTestId(test.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         </div>
                       </CardContent>
@@ -772,6 +901,35 @@ export default function TestFactoryAdmin() {
           </Card>
         )}
       </div>
+
+      {/* Preview Dialog */}
+      <GeneratedTestPreview
+        open={!!previewTest}
+        onOpenChange={(open) => !open && setPreviewTest(null)}
+        test={previewTest}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTestId} onOpenChange={(open) => !open && setDeleteTestId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Test</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this test? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => deleteTestId && deleteTest(deleteTestId)}
+              disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

@@ -70,7 +70,7 @@ serve(async (req) => {
       // Get generated tests for this job
       const { data: tests } = await supabase
         .from("generated_test_audio")
-        .select("id, status, voice_id, accent, is_published, created_at")
+        .select("id, status, voice_id, accent, question_type, is_published, created_at, content_payload, module")
         .eq("job_id", jobId)
         .order("created_at", { ascending: true });
 
