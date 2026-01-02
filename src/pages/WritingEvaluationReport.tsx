@@ -4,12 +4,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Star, FileText, MessageSquareText, Lightbulb, CheckCircle2, History, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Star, FileText, MessageSquareText, Lightbulb, CheckCircle2, History, AlertCircle, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { Tables } from '@/integrations/supabase/types';
 import { renderRichText } from '@/components/admin/RichTextEditor';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AddToFlashcardButton } from '@/components/common/AddToFlashcardButton';
 
 
 type WritingTest = Tables<'writing_tests'>;
@@ -303,6 +304,18 @@ export default function WritingEvaluationReport() {
                   <div className="prose prose-sm max-w-none text-muted-foreground" dangerouslySetInnerHTML={{ __html: renderRichText(evaluationReport.overall_suggestions) }} />
                 </div>
               )}
+
+              {/* Flashcard Import Button */}
+              <div className="pt-4 border-t border-border/50 flex items-center gap-3">
+                <BookOpen size={18} className="text-primary" />
+                <span className="text-sm text-muted-foreground">Save key vocabulary from this feedback:</span>
+                <AddToFlashcardButton 
+                  word=""
+                  meaning=""
+                  example=""
+                  variant="button"
+                />
+              </div>
 
               {/* Model Answer Section */}
               {overallBand !== null && overallBand < 9 && (
