@@ -4,12 +4,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Star, Mic, MessageSquareText, Lightbulb, CheckCircle2, History, AlertCircle, PlayCircle, FileText } from 'lucide-react';
+import { ArrowLeft, Star, Mic, MessageSquareText, Lightbulb, CheckCircle2, History, AlertCircle, PlayCircle, FileText, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { Tables } from '@/integrations/supabase/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { renderRichText } from '@/components/admin/RichTextEditor';
+import { AddToFlashcardButton } from '@/components/common/AddToFlashcardButton';
 
 
 type SpeakingTest = Tables<'speaking_tests'>;
@@ -198,6 +199,19 @@ export default function SpeakingEvaluationReport() {
           <div className="prose prose-sm max-w-none text-muted-foreground" dangerouslySetInnerHTML={{ __html: renderRichText(criterion.suggestions_for_improvement) }} />
         </div>
       </div>
+    </div>
+  );
+
+  const renderFlashcardImport = () => (
+    <div className="pt-4 border-t border-border/50 flex items-center gap-3">
+      <BookOpen size={18} className="text-primary" />
+      <span className="text-sm text-muted-foreground">Save key vocabulary from this feedback:</span>
+      <AddToFlashcardButton 
+        word=""
+        meaning=""
+        example=""
+        variant="button"
+      />
     </div>
   );
 
@@ -450,6 +464,9 @@ export default function SpeakingEvaluationReport() {
                         <div className="prose prose-sm max-w-none text-muted-foreground" dangerouslySetInnerHTML={{ __html: renderRichText(evaluationReport.examiner_notes) }} />
                       </div>
                     )}
+
+                    {/* Flashcard Import */}
+                    {renderFlashcardImport()}
 
                     {/* Model Answers Section */}
                     {overallBand !== null && overallBand !== undefined && overallBand < 9 && (
