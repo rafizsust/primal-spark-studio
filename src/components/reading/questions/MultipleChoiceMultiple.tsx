@@ -41,7 +41,11 @@ export function MultipleChoiceMultiple({
   maxAnswers = 2,
   onSetActive
 }: MultipleChoiceMultipleProps) {
-  const options = question.options || [];
+  const options = (question.options || []).map((opt) => {
+    // Avoid duplicated labels like "A. A ..." when option already contains its own prefix.
+    const m = opt.match(/^\s*([A-Za-z])\s*[\.|\)]?\s*(.+)$/);
+    return m && m[2] ? m[2].trim() : opt;
+  });
   const selectedAnswers = answer ? answer.split(',').filter(Boolean) : [];
   const optionFormat = question.option_format || 'A';
 

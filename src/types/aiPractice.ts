@@ -362,7 +362,8 @@ export async function saveGeneratedTestAsync(test: GeneratedTest, userId: string
     total_questions: test.totalQuestions,
     generated_at: test.generatedAt,
     payload: strippedTest as unknown as Json,
-    audio_url: null,
+    // IMPORTANT: presets may already provide a playable audioUrl
+    audio_url: test.audioUrl ?? null,
     audio_format: test.audioFormat ?? null,
     sample_rate: test.sampleRate ?? null,
   });
@@ -435,9 +436,10 @@ export async function loadGeneratedTestsAsync(userId: string): Promise<Generated
       timeMinutes: row.time_minutes,
       totalQuestions: row.total_questions,
       generatedAt: row.generated_at,
-      audioUrl: (row as any).audio_url ?? undefined,
-      audioFormat: row.audio_format ?? undefined,
-      sampleRate: row.sample_rate ?? undefined,
+      // Prefer persisted column, but keep payload audioUrl for presets
+      audioUrl: ((row as any).audio_url ?? payload.audioUrl) ?? undefined,
+      audioFormat: row.audio_format ?? payload.audioFormat ?? undefined,
+      sampleRate: row.sample_rate ?? payload.sampleRate ?? undefined,
     };
   });
 
@@ -477,9 +479,10 @@ export async function loadGeneratedTestAsync(testId: string): Promise<GeneratedT
     timeMinutes: data.time_minutes,
     totalQuestions: data.total_questions,
     generatedAt: data.generated_at,
-    audioUrl: (data as any).audio_url ?? undefined,
-    audioFormat: data.audio_format ?? undefined,
-    sampleRate: data.sample_rate ?? undefined,
+    // Prefer persisted column, but keep payload audioUrl for presets
+    audioUrl: ((data as any).audio_url ?? payload.audioUrl) ?? undefined,
+    audioFormat: data.audio_format ?? payload.audioFormat ?? undefined,
+    sampleRate: data.sample_rate ?? payload.sampleRate ?? undefined,
   };
 
   return test;

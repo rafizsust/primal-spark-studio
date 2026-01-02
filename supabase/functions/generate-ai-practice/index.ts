@@ -415,13 +415,15 @@ async function callGemini(
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: prompt }] }],
-              generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 8192,
-              },
-            }),
+              body: JSON.stringify({
+                contents: [{ parts: [{ text: prompt }] }],
+                generationConfig: {
+                  temperature: 0.7,
+                  maxOutputTokens: 8192,
+                  // Strongly encourages the model to return valid JSON (prevents "[A] ..." non-JSON output)
+                  responseMimeType: 'application/json',
+                },
+              }),
           }
         );
 
@@ -1854,29 +1856,83 @@ serve(async (req) => {
         // Build response based on module type using content_payload
         const payload = preset.content_payload || {};
         
-        if (module === 'listening') {
-          // Listening preset response
-          const responsePayload = {
-            testId: `preset-${preset.id}`,
-            topic: preset.topic,
-            transcript: preset.transcript || payload.dialogue || payload.transcript,
-            speakerNames: payload.speaker_names || payload.speakerNames,
-            audioUrl: preset.audio_url, // Pre-generated audio URL
-            audioBase64: null, // Not needed - using URL
-            audioFormat: 'wav',
-            sampleRate: 24000,
-            questionGroups: payload.questionGroups || [{
-              id: crypto.randomUUID(),
-              instruction: payload.instruction || 'Complete the questions below.',
-              question_type: preset.question_type || questionType,
-              start_question: 1,
-              end_question: (payload.questions?.length || 7),
-              options: payload.options || payload.groupOptions,
-              questions: payload.questions || [],
-            }],
-            isPreset: true,
-            presetId: preset.id,
-          };
+          if (module === 'listening') {
+            // Listening preset response
+            const normalizeType = (raw: unknown) => String(raw ?? '').trim().toUpperCase();
+
+            const buildGroup = (g: any, fallbackType: string) => {
+              const type = normalizeType(g?.question_type || fallbackType || questionType);
+              const qsRaw: any[] = Array.isArray(g?.questions)
+                ? g.questions
+                : Array.isArray(payload.questions)
+                  ? payload.questions
+                  : [];
+
+              let groupOptions: any = g?.options ?? payload.options ?? payload.groupOptions ?? {};
+              if (
+                Array.isArray(groupOptions) &&
+                [
+                  'MATCHING_CORRECT_LETTER',
+                  'MAPS',
+                  'MAP_LABELING',
+                  'MULTIPLE_CHOICE_MULTIPLE',
+                  'DRAG_AND_DROP_OPTIONS',
+                  'FLOWCHART_COMPLETION',
+                  'TABLE_COMPLETION',
+                ].includes(type)
+              ) {
+                groupOptions = { type, options: groupOptions, option_format: 'A' };
+              }
+
+              const questions = qsRaw.map((q: any, idx: number) => {
+                const qType = normalizeType(q?.question_type || type);
+                return {
+                  id: q?.id || crypto.randomUUID(),
+                  question_number: q?.question_number ?? idx + (g?.start_question ?? 1),
+                  question_type: qType,
+                  question_text: q?.question_text ?? q?.text ?? '',
+                  correct_answer: q?.correct_answer ?? q?.correctAnswer ?? '',
+                  explanation: q?.explanation ?? '',
+                  heading: q?.heading ?? null,
+                  options: Array.isArray(q?.options)
+                    ? q.options
+                    : Array.isArray(q?.options?.options)
+                      ? q.options.options
+                      : null,
+                  option_format: q?.option_format ?? groupOptions?.option_format ?? 'A',
+                  table_data: q?.table_data ?? groupOptions?.table_data ?? null,
+                };
+              });
+
+              return {
+                id: g?.id || crypto.randomUUID(),
+                instruction: g?.instruction || payload.instruction || 'Complete the questions below.',
+                question_type: type,
+                start_question: g?.start_question ?? 1,
+                end_question: g?.end_question ?? (g?.start_question ?? 1) + Math.max(0, questions.length - 1),
+                options: groupOptions,
+                questions,
+              };
+            };
+
+            const topLevelType = normalizeType(preset.question_type || questionType);
+            const groups = Array.isArray(payload.questionGroups) && payload.questionGroups.length > 0
+              ? payload.questionGroups.map((g: any) => buildGroup(g, topLevelType))
+              : [buildGroup({ questions: payload.questions, options: payload.options }, topLevelType)];
+
+            const responsePayload = {
+              testId: `preset-${preset.id}`,
+              topic: preset.topic,
+              transcript: preset.transcript || payload.dialogue || payload.transcript,
+              speakerNames: payload.speaker_names || payload.speakerNames,
+              audioUrl: preset.audio_url, // Pre-generated audio URL
+              audioBase64: null, // Not needed - using URL
+              audioFormat: 'wav',
+              sampleRate: 24000,
+              questionGroups: groups,
+              isPreset: true,
+              presetId: preset.id,
+            };
           
           console.log(`Serving listening preset: ${preset.topic}`);
           return new Response(JSON.stringify(responsePayload), {
@@ -1962,6 +2018,53 @@ serve(async (req) => {
           });
         } else if (module === 'reading') {
           // Reading preset response
+          const normalizeType = (raw: unknown) => String(raw ?? '').trim().toUpperCase();
+
+          const buildGroup = (g: any, fallbackType: string) => {
+            const type = normalizeType(g?.question_type || fallbackType || questionType);
+            const qsRaw: any[] = Array.isArray(g?.questions)
+              ? g.questions
+              : Array.isArray(payload.questions)
+                ? payload.questions
+                : [];
+
+            const groupOptions: any = g?.options ?? payload.options ?? {};
+
+            const questions = qsRaw.map((q: any, idx: number) => {
+              const qType = normalizeType(q?.question_type || type);
+              return {
+                id: q?.id || crypto.randomUUID(),
+                question_number: q?.question_number ?? idx + (g?.start_question ?? 1),
+                question_type: qType,
+                question_text: q?.question_text ?? q?.text ?? '',
+                correct_answer: q?.correct_answer ?? q?.correctAnswer ?? '',
+                explanation: q?.explanation ?? '',
+                options: Array.isArray(q?.options)
+                  ? q.options
+                  : Array.isArray(q?.options?.options)
+                    ? q.options.options
+                    : null,
+                heading: q?.heading ?? null,
+                table_data: q?.table_data ?? groupOptions?.table_data ?? null,
+              };
+            });
+
+            return {
+              id: g?.id || crypto.randomUUID(),
+              instruction: g?.instruction || payload.instruction || 'Answer the questions below.',
+              question_type: type,
+              start_question: g?.start_question ?? 1,
+              end_question: g?.end_question ?? (g?.start_question ?? 1) + Math.max(0, questions.length - 1),
+              options: groupOptions,
+              questions,
+            };
+          };
+
+          const topLevelType = normalizeType(preset.question_type || questionType);
+          const groups = Array.isArray(payload.questionGroups) && payload.questionGroups.length > 0
+            ? payload.questionGroups.map((g: any) => buildGroup(g, topLevelType))
+            : [buildGroup({ questions: payload.questions, options: payload.options }, topLevelType)];
+
           const responsePayload = {
             testId: `preset-${preset.id}`,
             topic: preset.topic,
@@ -1970,15 +2073,7 @@ serve(async (req) => {
               title: preset.topic,
               content: payload.passageContent || '',
             },
-            questionGroups: payload.questionGroups || [{
-              id: crypto.randomUUID(),
-              instruction: payload.instruction || 'Answer the questions below.',
-              question_type: preset.question_type || questionType,
-              start_question: 1,
-              end_question: (payload.questions?.length || 7),
-              options: payload.options,
-              questions: payload.questions || [],
-            }],
+            questionGroups: groups,
             isPreset: true,
             presetId: preset.id,
           };

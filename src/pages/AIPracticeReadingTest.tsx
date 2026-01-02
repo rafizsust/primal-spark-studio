@@ -121,13 +121,24 @@ export default function AIPracticeReadingTest() {
 
     // Convert AI questions to expected format
     if (loadedTest.questionGroups && loadedTest.questionGroups.length > 0) {
+      const normalizeType = (raw: unknown) => {
+        const t = String(raw ?? '').trim();
+        if (!t) return '';
+        const upper = t.toUpperCase();
+        // Reading renderer expects MULTIPLE_CHOICE for single-select
+        if (upper === 'MULTIPLE_CHOICE_SINGLE') return 'MULTIPLE_CHOICE';
+        return upper;
+      };
+
       const convertedQuestions: Question[] = [];
       const convertedGroups: QuestionGroup[] = [];
 
       loadedTest.questionGroups.forEach((group) => {
+        const groupType = normalizeType(group.question_type);
+
         convertedGroups.push({
           id: group.id,
-          question_type: group.question_type,
+          question_type: groupType,
           options: group.options,
           start_question: group.start_question,
           end_question: group.end_question,
@@ -135,14 +146,15 @@ export default function AIPracticeReadingTest() {
 
         group.questions.forEach((q) => {
           // For TABLE_COMPLETION, get table_data from group options if not on question
-          const tableData = q.table_data || group.options?.table_data || null;
-          
+          const tableData = q.table_data || (group.options as any)?.table_data || null;
+          const questionType = normalizeType(q.question_type || groupType);
+
           convertedQuestions.push({
             id: q.id,
             question_number: q.question_number,
-            question_type: q.question_type,
+            question_type: questionType,
             question_text: q.question_text,
-            options: q.options || null,
+            options: (q as any).options || null,
             correct_answer: q.correct_answer,
             instruction: null,
             passage_id: loadedTest.passage?.id || '',
@@ -155,7 +167,7 @@ export default function AIPracticeReadingTest() {
 
       setQuestions(convertedQuestions.sort((a, b) => a.question_number - b.question_number));
       setQuestionGroups(convertedGroups);
-      
+
       if (convertedQuestions.length > 0) {
         setCurrentQuestion(convertedQuestions[0].question_number);
       }

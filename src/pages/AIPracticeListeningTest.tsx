@@ -214,41 +214,80 @@ export default function AIPracticeListeningTest() {
 
     // Convert AI questions to expected format
     if (loadedTest.questionGroups && loadedTest.questionGroups.length > 0) {
+      const normalizeType = (raw: unknown) => {
+        const t = String(raw ?? '').trim();
+        if (!t) return '';
+        const upper = t.toUpperCase();
+        // Listening renderer expects MULTIPLE_CHOICE_SINGLE / MULTIPLE_CHOICE_MULTIPLE
+        if (upper === 'MULTIPLE_CHOICE') return 'MULTIPLE_CHOICE_SINGLE';
+        // Some imports may store short/slug forms
+        if (upper === 'DRAG_AND_DROP') return 'DRAG_AND_DROP_OPTIONS';
+        // British spelling / legacy naming
+        if (upper === 'MAP_LABELLING') return 'MAP_LABELING';
+        return upper;
+      };
+
       const convertedQuestions: Question[] = [];
       const convertedGroups: QuestionGroup[] = [];
 
       loadedTest.questionGroups.forEach((group) => {
-        const groupQuestions: Question[] = group.questions.map((q) => ({
-          id: q.id,
-          question_number: q.question_number,
-          question_type: q.question_type,
-          question_text: q.question_text,
-          correct_answer: q.correct_answer,
-          instruction: null,
-          group_id: group.id,
-          is_given: false,
-          heading: q.heading || null,
-          options: q.options || null,
-          option_format: group.options?.option_format || null,
-        }));
+        const groupType = normalizeType(group.question_type);
+
+        let groupOptions: any = group.options;
+        // Align with ListeningQuestions expectations (group.options.options + option_format)
+        if (
+          Array.isArray(groupOptions) &&
+          [
+            'MATCHING_CORRECT_LETTER',
+            'MAPS',
+            'MAP_LABELING',
+            'MULTIPLE_CHOICE_MULTIPLE',
+            'DRAG_AND_DROP_OPTIONS',
+            'FLOWCHART_COMPLETION',
+            'TABLE_COMPLETION',
+          ].includes(groupType)
+        ) {
+          groupOptions = { type: groupType, options: groupOptions, option_format: 'A' };
+        }
+
+        const groupQuestions: Question[] = group.questions.map((q) => {
+          const qt = normalizeType(q.question_type || groupType);
+          return {
+            id: q.id,
+            question_number: q.question_number,
+            question_type: qt,
+            question_text: q.question_text,
+            correct_answer: q.correct_answer,
+            instruction: null,
+            group_id: group.id,
+            is_given: false,
+            heading: q.heading || null,
+            options: Array.isArray((q as any).options)
+              ? ((q as any).options as string[])
+              : Array.isArray((q as any).options?.options)
+                ? ((q as any).options.options as string[])
+                : null,
+            option_format: (q as any).option_format || groupOptions?.option_format || null,
+          };
+        });
 
         convertedQuestions.push(...groupQuestions);
 
         convertedGroups.push({
           id: group.id,
-          question_type: group.question_type,
+          question_type: groupType,
           instruction: group.instruction,
           start_question: group.start_question,
           end_question: group.end_question,
-          options: group.options,
-          option_format: group.options?.option_format,
+          options: groupOptions,
+          option_format: groupOptions?.option_format,
           questions: groupQuestions,
         });
       });
 
       setQuestions(convertedQuestions.sort((a, b) => a.question_number - b.question_number));
       setQuestionGroups(convertedGroups);
-      
+
       if (convertedQuestions.length > 0) {
         setCurrentQuestion(convertedQuestions[0].question_number);
       }

@@ -16,8 +16,14 @@ interface Question {
 
 // Helper to extract text from option (handles both string and object formats)
 const getOptionText = (option: OptionItem): string => {
-  if (typeof option === 'string') return option;
-  return option.text || '';
+  const raw = typeof option === 'string' ? option : (option.text || '');
+
+  // Avoid duplicated labels like "A. A ..." when the generated option already includes a prefix.
+  // Examples handled: "A Recommended", "A. Recommended", "A) Recommended"
+  const m = raw.match(/^\s*([A-Za-z])\s*[\.|\)]?\s*(.+)$/);
+  if (m && m[2]) return m[2].trim();
+
+  return raw;
 };
 
 // Helper to get the label from option (for object format) or generate from index
