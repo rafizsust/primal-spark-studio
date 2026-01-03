@@ -173,8 +173,17 @@ export default function AIPracticeHistory() {
 
   const handleStartTest = (test: AIPracticeTest) => {
     // Convert DB record to GeneratedTest format and cache it
-    const payload = typeof test.payload === 'object' && test.payload !== null ? test.payload as Record<string, any> : {};
+    const payload = typeof test.payload === 'object' && test.payload !== null ? (test.payload as Record<string, any>) : {};
+
+    // Prefer DB columns, then payload fallbacks (some older rows stored audioUrl inside payload)
+    const resolvedAudioUrl =
+      (test as any).audio_url ??
+      payload.audioUrl ??
+      (payload as any).audio_url ??
+      undefined;
+
     const generatedTest: GeneratedTest = {
+      ...payload,
       id: test.id,
       module: test.module as any,
       questionType: test.question_type as any,
@@ -183,10 +192,9 @@ export default function AIPracticeHistory() {
       timeMinutes: test.time_minutes,
       totalQuestions: test.total_questions,
       generatedAt: test.generated_at,
-      audioUrl: (test as any).audio_url ?? undefined,
-      audioFormat: (test as any).audio_format ?? undefined,
-      sampleRate: (test as any).sample_rate ?? undefined,
-      ...payload,
+      audioUrl: resolvedAudioUrl,
+      audioFormat: (test as any).audio_format ?? payload.audioFormat ?? undefined,
+      sampleRate: (test as any).sample_rate ?? payload.sampleRate ?? undefined,
     };
 
     setCurrentTest(generatedTest);

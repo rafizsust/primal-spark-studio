@@ -370,8 +370,19 @@ export default function AIPracticeListeningTest() {
     // Try memory cache first
     const cachedTest = loadGeneratedTest(testId);
     if (cachedTest && cachedTest.module === 'listening') {
-      initializeTest(cachedTest);
-      return;
+      const hasPlayableAudio = Boolean(
+        cachedTest.audioBase64 ||
+          cachedTest.audioUrl ||
+          (cachedTest as any).audio_url ||
+          (cachedTest as any).payload?.audio_url ||
+          (cachedTest as any).payload?.audioUrl
+      );
+
+      // If cache is missing audio (common after backfills), hydrate from Supabase instead of forcing TTS.
+      if (hasPlayableAudio) {
+        initializeTest(cachedTest);
+        return;
+      }
     }
 
     // Fallback: load from Supabase
