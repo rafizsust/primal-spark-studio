@@ -482,7 +482,7 @@ function getQuestionTypesForModule(module: string, selectedType: string): string
         "MULTIPLE_CHOICE_MULTIPLE",
         "MATCHING_HEADINGS",
         "SENTENCE_COMPLETION",
-        "SUMMARY_COMPLETION",
+        "SUMMARY_WORD_BANK",
         "SHORT_ANSWER",
       ];
     case "listening":
@@ -700,8 +700,7 @@ Return ONLY valid JSON:
 }`;
 
     case "SENTENCE_COMPLETION":
-    case "SUMMARY_COMPLETION":
-      return basePrompt + `Create ${questionCount} ${questionType === "SENTENCE_COMPLETION" ? "sentence" : "summary"} completion questions.
+      return basePrompt + `Create ${questionCount} sentence completion questions.
 
 Return ONLY valid JSON:
 {
@@ -709,6 +708,35 @@ Return ONLY valid JSON:
   "instruction": "Complete the sentences. Write NO MORE THAN THREE WORDS.",
   "questions": [
     {"question_number": 1, "question_text": "The main advantage is _____.", "correct_answer": "increased efficiency", "explanation": "Why"}
+  ]
+}`;
+
+    case "SUMMARY_COMPLETION":
+    case "SUMMARY_WORD_BANK":
+      return basePrompt + `Create a summary completion task with a word bank.
+The summary_text should have gaps marked with {{1}}, {{2}}, {{3}} etc.
+Create 4-6 questions where each correct_answer is a letter (A-H) from the word_bank.
+
+Return ONLY valid JSON:
+{
+  "passage": {"title": "Title", "content": "Full passage with paragraph labels [A], [B], etc."},
+  "instruction": "Complete the summary using the list of words, A-H, below.",
+  "summary_text": "The passage discusses how {{1}} affects modern society. Scientists have found that {{2}} plays a crucial role. Furthermore, {{3}} has been identified as key, while {{4}} remains a concern.",
+  "word_bank": [
+    {"id": "A", "text": "technology"},
+    {"id": "B", "text": "environment"},
+    {"id": "C", "text": "research"},
+    {"id": "D", "text": "education"},
+    {"id": "E", "text": "climate"},
+    {"id": "F", "text": "innovation"},
+    {"id": "G", "text": "development"},
+    {"id": "H", "text": "resources"}
+  ],
+  "questions": [
+    {"question_number": 1, "question_text": "Gap 1", "correct_answer": "A", "explanation": "Technology is discussed as affecting society"},
+    {"question_number": 2, "question_text": "Gap 2", "correct_answer": "C", "explanation": "Research is mentioned as crucial"},
+    {"question_number": 3, "question_text": "Gap 3", "correct_answer": "E", "explanation": "Climate is identified as key factor"},
+    {"question_number": 4, "question_text": "Gap 4", "correct_answer": "B", "explanation": "Environment remains a concern"}
   ]
 }`;
 
