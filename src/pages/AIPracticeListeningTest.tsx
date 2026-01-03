@@ -170,8 +170,21 @@ export default function AIPracticeListeningTest() {
     setTimeLeft(loadedTest.timeMinutes * 60);
     startTimeRef.current = Date.now();
 
-    // Setup audio if available - PRIORITY: base64 > audio_url > audioUrl > transcript TTS
-    const resolvedAudioUrl = loadedTest.audioUrl || (loadedTest as any).audio_url;
+    // Setup audio if available - PRIORITY: base64 > audio_url (root) > audioUrl > payload.audio_url > transcript TTS
+    // Check EVERY possible location including payload for preset tests
+    const resolvedAudioUrl = 
+      loadedTest.audioUrl || 
+      (loadedTest as any).audio_url || 
+      (loadedTest as any).payload?.audio_url ||
+      (loadedTest as any).payload?.audioUrl ||
+      null;
+    
+    console.log('[AIPracticeListening] Audio resolution check:', {
+      audioUrl: loadedTest.audioUrl,
+      audio_url: (loadedTest as any).audio_url,
+      payloadAudioUrl: (loadedTest as any).payload?.audio_url,
+      resolved: resolvedAudioUrl
+    });
     
     if (loadedTest.audioBase64) {
       try {

@@ -951,7 +951,7 @@ ${genderConstraint}
 ${speakerInstructions}
 - Natural conversation with realistic names/roles
 - Contains specific details (names, numbers, dates, locations)
-- Use <break time='2s'/> between speaker turns for pacing
+- Use natural, short pauses: <break time='500ms'/> between sentences. NEVER use pauses longer than 1 second.
 
 `;
 
@@ -960,15 +960,17 @@ ${speakerInstructions}
       return basePrompt + `Create ${questionCount} fill-in-the-blank questions.
 ${gapPositionInstruction}
 
+CRITICAL NEGATIVE CONSTRAINT: You are PROHIBITED from placing the blank at the very end of the sentence more than 30% of the time. Vary positions naturally.
+
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Welcome...<break time='2s'/>\\nSpeaker2: Thank you...",
+  "dialogue": "Speaker1: Welcome to the museum.<break time='500ms'/>\\nSpeaker2: Thank you for having me...",
   "speaker_names": {"Speaker1": "Guide", "Speaker2": "Visitor"},
   "instruction": "Complete the notes. Write NO MORE THAN THREE WORDS.",
   "questions": [
-    {"question_number": 1, "question_text": "_____ is located near the entrance.", "correct_answer": "The gift shop", "explanation": "Speaker mentions location"},
-    {"question_number": 2, "question_text": "The tour starts at _____ each morning.", "correct_answer": "9:30 AM", "explanation": "Speaker mentions time"},
-    {"question_number": 3, "question_text": "Visitors should bring _____.", "correct_answer": "comfortable shoes", "explanation": "Speaker recommends footwear"}
+    {"question_number": 1, "question_text": "_____ is located near the entrance.", "correct_answer": "The gift shop", "explanation": "Speaker mentions location (START gap)"},
+    {"question_number": 2, "question_text": "The tour starts at _____ each morning.", "correct_answer": "9:30 AM", "explanation": "Speaker mentions time (MIDDLE gap)"},
+    {"question_number": 3, "question_text": "Visitors should bring _____.", "correct_answer": "comfortable shoes", "explanation": "Speaker recommends footwear (END gap)"}
   ]
 }`;
 
@@ -977,7 +979,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Let me explain...<break time='2s'/>",
+  "dialogue": "Speaker1: Let me explain...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "Instructor"},
   "instruction": "Choose the correct letter, A, B or C.",
   "questions": [
@@ -990,7 +992,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Here's the schedule...<break time='2s'/>",
+  "dialogue": "Speaker1: Here's the schedule...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "Coordinator"},
   "instruction": "Complete the table below.",
   "table_data": {
@@ -1009,7 +1011,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: The key points are...<break time='2s'/>",
+  "dialogue": "Speaker1: The key points are...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "Lecturer"},
   "instruction": "Complete the notes below.",
   "note_sections": [
@@ -1025,7 +1027,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Each department has...<break time='2s'/>",
+  "dialogue": "Speaker1: Each department has...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "Manager"},
   "instruction": "Match each person to their department.",
   "options": [{"letter": "A", "text": "Marketing"}, {"letter": "B", "text": "Finance"}, {"letter": "C", "text": "HR"}],
@@ -1039,7 +1041,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: dialogue...<break time='2s'/>\\nSpeaker2: response...",
+  "dialogue": "Speaker1: dialogue...<break time='500ms'/>\\nSpeaker2: response...",
   "speaker_names": {"Speaker1": "Host", "Speaker2": "Guest"},
   "instruction": "Complete the notes below.",
   "questions": [

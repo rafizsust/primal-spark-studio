@@ -1521,15 +1521,15 @@ function getListeningPrompt(
   // Determine if we use 1 or 2 speakers based on config
   const useTwoSpeakers = listeningConfig?.speakerConfig?.useTwoSpeakers !== false;
 
-  // SSML pause instructions per Architect spec - CRITICAL for TTS pacing
+  // SSML pause instructions - Use natural, short pauses
   const ssmlInstructions = `
-   CRITICAL AUDIO PACING - MUST USE SSML TAGS:
+   CRITICAL AUDIO PACING - NATURAL PAUSES ONLY:
    - You MUST use SSML tags for pauses in the dialogue
-   - Insert <break time='5s'/> between major topic changes or question sections
-   - Insert <break time='2s'/> between speaker turns  
-   - Insert <break time='1s'/> for natural pauses within speech
-   - Example: "Speaker1: Welcome to the museum tour.<break time='2s'/> Let me start by explaining the layout."
-   - This ensures test takers have time to write answers`;
+   - Insert <break time='500ms'/> between sentences and speaker turns
+   - Insert <break time='300ms'/> for natural pauses within speech
+   - NEVER use pauses longer than 1 second - keep the audio flowing naturally
+   - Example: "Speaker1: Welcome to the museum tour.<break time='500ms'/> Let me start by explaining the layout."
+   - Avoid long silences - test takers can pause the audio if needed`;
 
   // Build prompt for realistic character names with SSML instructions
   const characterInstructions = useTwoSpeakers
@@ -1592,13 +1592,13 @@ ${gapPositionInstruction}
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Welcome to today's lecture...<break time='2s'/> Let me explain...",
+  "dialogue": "Speaker1: Welcome to today's lecture...<break time='500ms'/> Let me explain...",
   "speaker_names": {"Speaker1": "Professor Williams"},
   "instruction": "Complete the notes below. Write NO MORE THAN THREE WORDS AND/OR A NUMBER for each answer.",
   "questions": [
-    {"question_number": 1, "question_text": "_____ was the primary building material used.", "correct_answer": "Limestone", "explanation": "Speaker mentions limestone"},
-    {"question_number": 2, "question_text": "The museum opens at _____ on weekdays.", "correct_answer": "9 AM", "explanation": "Speaker states opening time"},
-    {"question_number": 3, "question_text": "Visitors should register at _____.", "correct_answer": "the front desk", "explanation": "Speaker mentions registration location"}
+    {"question_number": 1, "question_text": "_____ was the primary building material used.", "correct_answer": "Limestone", "explanation": "Speaker mentions limestone (START gap)"},
+    {"question_number": 2, "question_text": "The museum opens at _____ on weekdays.", "correct_answer": "9 AM", "explanation": "Speaker states opening time (MIDDLE gap)"},
+    {"question_number": 3, "question_text": "Visitors should register at _____.", "correct_answer": "the front desk", "explanation": "Speaker mentions registration location (END gap)"}
   ]
 }`;
     }
@@ -1607,15 +1607,17 @@ Return ONLY valid JSON:
     return basePrompt + `2. Create ${effectiveQuestionCount} fill-in-the-blank questions.
 ${gapPositionInstruction}
 
+CRITICAL NEGATIVE CONSTRAINT: You are PROHIBITED from placing the blank at the very end of the sentence more than 30% of the time.
+
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Hello, welcome to the museum...<break time='2s'/>\\nSpeaker2: Thank you...",
+  "dialogue": "Speaker1: Hello, welcome to the museum...<break time='500ms'/>\\nSpeaker2: Thank you...",
   "speaker_names": {"Speaker1": "Tour Guide", "Speaker2": "Visitor"},
   "instruction": "Complete the notes below. Write NO MORE THAN THREE WORDS AND/OR A NUMBER for each answer.",
   "questions": [
-    {"question_number": 1, "question_text": "_____ is located on the second floor.", "correct_answer": "The gift shop", "explanation": "Speaker mentions gift shop location"},
-    {"question_number": 2, "question_text": "The tour lasts approximately _____.", "correct_answer": "45 minutes", "explanation": "Speaker mentions tour duration"},
-    {"question_number": 3, "question_text": "Photography is not allowed in _____.", "correct_answer": "the main gallery", "explanation": "Speaker mentions photography restriction"}
+    {"question_number": 1, "question_text": "_____ is located on the second floor.", "correct_answer": "The gift shop", "explanation": "Speaker mentions gift shop location (START gap)"},
+    {"question_number": 2, "question_text": "The tour lasts approximately _____.", "correct_answer": "45 minutes", "explanation": "Speaker mentions tour duration (MIDDLE gap)"},
+    {"question_number": 3, "question_text": "Photography is not allowed in _____.", "correct_answer": "the main gallery", "explanation": "Speaker mentions photography restriction (END gap)"}
   ]
 }`;
   }
@@ -1627,7 +1629,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Let me explain...<break time='2s'/>\\nSpeaker2: I see...",
+  "dialogue": "Speaker1: Let me explain...<break time='500ms'/>\\nSpeaker2: I see...",
   "speaker_names": {"Speaker1": "Instructor", "Speaker2": "Student"},
   "instruction": "Choose the correct letter, A, B or C.",
   "questions": [
@@ -1640,7 +1642,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: There are several benefits...<break time='2s'/>",
+  "dialogue": "Speaker1: There are several benefits...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "Expert"},
   "instruction": "Choose TWO letters, A-E.",
   "questions": [
@@ -1653,7 +1655,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Each department has responsibilities...<break time='2s'/>",
+  "dialogue": "Speaker1: Each department has responsibilities...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "Manager"},
   "instruction": "Match each person to their department.",
   "options": [{"letter": "A", "text": "Marketing"}, {"letter": "B", "text": "Finance"}, {"letter": "C", "text": "HR"}],
@@ -1667,7 +1669,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Let me give you the schedule...<break time='2s'/>",
+  "dialogue": "Speaker1: Let me give you the schedule...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "Coordinator"},
   "instruction": "Complete the table below.",
   "table_data": {
@@ -1687,7 +1689,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Let me explain the process...<break time='2s'/>",
+  "dialogue": "Speaker1: Let me explain the process...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "HR Manager"},
   "instruction": "Complete the flow chart below.",
   "flowchart_title": "Application Process",
@@ -1710,7 +1712,7 @@ Include x,y coordinates (0-100 percentage) for each label and landmark for map r
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Welcome to Historic Fairview. Let me show you around...<break time='1s'/> The quilt shop is on the west side of Main Street, just past the welcome center. <break time='2s'/> If you walk north along Main Street, you'll find the handicrafts museum on your right, directly across from the bank...",
+  "dialogue": "Speaker1: Welcome to Historic Fairview. Let me show you around...<break time='500ms'/> The quilt shop is on the west side of Main Street, just past the welcome center.<break time='500ms'/> If you walk north along Main Street, you'll find the handicrafts museum on your right, directly across from the bank...",
   "speaker_names": {"Speaker1": "Tour Guide"},
   "instruction": "Label the map. Choose the correct letter, A-H.",
   "map_description": "A street map showing the intersection of Oak Street and Main Street. Buildings are arranged along both streets.",
@@ -1744,7 +1746,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Let me explain the key points...<break time='2s'/>",
+  "dialogue": "Speaker1: Let me explain the key points...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "Lecturer"},
   "instruction": "Complete the notes below.",
   "note_sections": [
@@ -1765,7 +1767,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Each department has different responsibilities...<break time='2s'/>",
+  "dialogue": "Speaker1: Each department has different responsibilities...<break time='500ms'/>",
   "speaker_names": {"Speaker1": "Department Head"},
   "instruction": "Match each person to their responsibility.",
   "drag_options": ["Managing budget", "Training staff", "Customer service", "Quality control", "Marketing"],
@@ -1779,7 +1781,7 @@ Return ONLY valid JSON:
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: dialogue...<break time='2s'/>\\nSpeaker2: response...",
+  "dialogue": "Speaker1: dialogue...<break time='500ms'/>\\nSpeaker2: response...",
   "speaker_names": {"Speaker1": "Host", "Speaker2": "Guest"},
   "instruction": "Complete the notes below.",
   "questions": [
@@ -2708,7 +2710,7 @@ serve(async (req) => {
 Remove all speaker labels (e.g., "Speaker1:", "Speaker2:", names followed by colons). 
 Convert the conversation into a flowing narrative that a single narrator would read aloud.
 Keep ALL factual information, numbers, dates, names, and details that would be needed to answer test questions.
-Keep SSML break tags like <break time='2s'/> for pacing.
+Keep SSML break tags like <break time='500ms'/> for pacing. Never use pauses longer than 1 second.
 Return ONLY the raw monologue text, no JSON wrapper.
 
 DIALOGUE TO CONVERT:
