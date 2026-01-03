@@ -304,6 +304,44 @@ export default function AIPracticeResults() {
     return out;
   }, [test?.questionGroups]);
 
+  // Option map for SUMMARY_WORD_BANK / SUMMARY_COMPLETION so results show word text (not letter IDs).
+  const wordBankOptionByQuestionNumber = useMemo(() => {
+    const out: Record<number, Map<string, string>> = {};
+
+    const groups = test?.questionGroups ?? [];
+    for (const g of groups) {
+      const type = g.question_type?.toUpperCase() || '';
+      if (type !== 'SUMMARY_WORD_BANK' && type !== 'SUMMARY_COMPLETION') continue;
+
+      const raw: any = g.options || {};
+      const wordBankRaw: any[] =
+        Array.isArray(raw?.word_bank) ? raw.word_bank :
+        Array.isArray(raw?.wordBank) ? raw.wordBank :
+        Array.isArray(raw?.options) ? raw.options :
+        [];
+
+      const map = new Map<string, string>();
+      for (const item of wordBankRaw) {
+        if (typeof item === 'string') {
+          // Plain string: id=text
+          map.set(item, item);
+        } else if (item && typeof item === 'object') {
+          const id = String(item.id ?? item.letter ?? '').trim().toUpperCase();
+          const text = String(item.text ?? item.label ?? item.option ?? '').trim();
+          if (id && text) {
+            map.set(id, text);
+          }
+        }
+      }
+
+      for (const q of g.questions || []) {
+        out[q.question_number] = map;
+      }
+    }
+
+    return out;
+  }, [test?.questionGroups]);
+
   // Defensive check for questionResults
   const questionResults = result?.questionResults ?? [];
 
@@ -620,6 +658,17 @@ export default function AIPracticeResults() {
 
                                 if (type === 'MATCHING_SENTENCE_ENDINGS') {
                                   return renderSentenceEnding(value);
+                                }
+
+                                // Summary Word Bank / Summary Completion: translate letter ID → word text
+                                if (type === 'SUMMARY_WORD_BANK' || type === 'SUMMARY_COMPLETION') {
+                                  const map = wordBankOptionByQuestionNumber[qResult.questionNumber];
+                                  if (map) {
+                                    const text = map.get(value.trim().toUpperCase());
+                                    if (text) return text;
+                                  }
+                                  // Fallback: return as-is
+                                  return value;
                                 }
 
                                 return value;
