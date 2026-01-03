@@ -9,7 +9,8 @@ import {
 import { TestOptionsMenu, ContrastMode, TextSizeMode } from '@/components/reading/TestOptionsMenu';
 import { TestStartOverlay } from '@/components/common/TestStartOverlay';
 import { ExitTestConfirmDialog } from '@/components/common/ExitTestConfirmDialog';
-import { StickyNote, ArrowLeft, ArrowRight, Sparkles, Volume2, Play, Pause, AlertCircle, VolumeX } from 'lucide-react';
+import { StickyNote, ArrowLeft, ArrowRight, Sparkles, Volume2, Play, Pause } from 'lucide-react';
+import { SimulatedAudioPlayer } from '@/components/listening/SimulatedAudioPlayer';
 import {
   ResizablePanel,
   ResizablePanelGroup,
@@ -24,7 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useAuth } from '@/hooks/useAuth';
 import { useTopicCompletions } from '@/hooks/useTopicCompletions';
-import { useTTSFallback } from '@/hooks/useTTSFallback';
+
 import { 
   loadGeneratedTest,
   loadGeneratedTestAsync,
@@ -143,8 +144,6 @@ export default function AIPracticeListeningTest() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const audioUrlRef = useRef<string | null>(null);
   
-  // TTS Fallback for when audio fails
-  const { speak: speakTTS, stop: stopTTS, isSpeaking: isTTSSpeaking, isSupported: isTTSSupported } = useTTSFallback({ rate: 0.9 });
   
   // Theme settings
   const [contrastMode, setContrastMode] = useState<ContrastMode>('black-on-white');
@@ -208,8 +207,12 @@ export default function AIPracticeListeningTest() {
         setAudioEnded(true);
       });
       audio.addEventListener('error', () => setAudioError('Failed to load audio'));
+    } else if (loadedTest.transcript) {
+      // No audio available but transcript exists - use TTS simulation
+      setAudioError('tts_fallback');
     } else {
-      setAudioError('Audio not available. You can practice with the transcript below.');
+      // No audio and no transcript - critical error
+      setAudioError('Audio content not available.');
     }
 
     // Convert AI questions to expected format
@@ -692,22 +695,14 @@ export default function AIPracticeListeningTest() {
 
             {/* Audio Player in header */}
             <div className="hidden md:flex flex-1 max-w-lg mx-4 items-center gap-3">
-              {audioError ? (
-                <div className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />
-                  <span className="text-sm text-amber-600 truncate max-w-[150px]">{audioError}</span>
-                  {isTTSSupported && test.transcript && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => isTTSSpeaking ? stopTTS() : speakTTS(test.transcript!)}
-                      className="gap-1 flex-shrink-0"
-                    >
-                      {isTTSSpeaking ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                      {isTTSSpeaking ? 'Stop' : 'Read Aloud'}
-                    </Button>
-                  )}
-                </div>
+              {audioError === 'tts_fallback' && test.transcript ? (
+                <SimulatedAudioPlayer
+                  text={test.transcript}
+                  onComplete={() => setAudioEnded(true)}
+                  className="flex-1"
+                />
+              ) : audioError ? (
+                <span className="text-sm text-destructive">{audioError}</span>
               ) : (
                 <>
                   <Button
@@ -825,29 +820,12 @@ export default function AIPracticeListeningTest() {
                         "font-[var(--font-ielts)] text-foreground"
                       )}
                     >
-                      {/* Transcript Section if no audio */}
-                      {audioError && test.transcript && (
-                        <div className="mb-6 p-4 bg-muted/50 rounded-lg border">
-                          <div className="flex items-center justify-between mb-2">
-                            <h3 className="font-semibold flex items-center gap-2">
-                              <AlertCircle className="w-4 h-4 text-amber-600" />
-                              Transcript (Audio unavailable)
-                            </h3>
-                            {isTTSSupported && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => isTTSSpeaking ? stopTTS() : speakTTS(test.transcript!)}
-                                className="gap-1"
-                              >
-                                {isTTSSpeaking ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                                {isTTSSpeaking ? 'Stop' : 'Read Aloud'}
-                              </Button>
-                            )}
-                          </div>
-                          <div 
-                            className="text-sm whitespace-pre-wrap"
-                            dangerouslySetInnerHTML={{ __html: renderRichText(test.transcript) }}
+                      {/* SimulatedAudioPlayer when TTS fallback is active - NO transcript visible */}
+                      {audioError === 'tts_fallback' && test.transcript && (
+                        <div className="mb-6 p-4 bg-primary/5 rounded-lg border border-primary/20">
+                          <SimulatedAudioPlayer
+                            text={test.transcript}
+                            onComplete={() => setAudioEnded(true)}
                           />
                         </div>
                       )}
@@ -903,29 +881,12 @@ export default function AIPracticeListeningTest() {
             <div className="md:hidden h-full flex flex-col relative">
               {mobileView === 'questions' ? (
                 <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 pb-20 bg-white font-[var(--font-ielts)] text-foreground">
-                  {/* Mobile Transcript if no audio */}
-                  {audioError && test.transcript && (
-                    <div className="mb-4 p-3 bg-muted/50 rounded-lg border">
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="font-semibold text-sm flex items-center gap-2">
-                          <AlertCircle className="w-4 h-4 text-amber-600" />
-                          Transcript
-                        </h3>
-                        {isTTSSupported && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => isTTSSpeaking ? stopTTS() : speakTTS(test.transcript!)}
-                            className="gap-1 h-7 text-xs"
-                          >
-                            {isTTSSpeaking ? <VolumeX className="w-3 h-3" /> : <Volume2 className="w-3 h-3" />}
-                            {isTTSSpeaking ? 'Stop' : 'Read'}
-                          </Button>
-                        )}
-                      </div>
-                      <div 
-                        className="text-xs whitespace-pre-wrap"
-                        dangerouslySetInnerHTML={{ __html: renderRichText(test.transcript) }}
+                  {/* Mobile SimulatedAudioPlayer if TTS fallback active - NO transcript visible */}
+                  {audioError === 'tts_fallback' && test.transcript && (
+                    <div className="mb-4 p-3 bg-primary/5 rounded-lg border border-primary/20">
+                      <SimulatedAudioPlayer
+                        text={test.transcript}
+                        onComplete={() => setAudioEnded(true)}
                       />
                     </div>
                   )}
@@ -945,21 +906,15 @@ export default function AIPracticeListeningTest() {
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center p-4 bg-white">
                   <p className="text-sm text-muted-foreground mb-4">Audio Player</p>
-                  {audioError ? (
-                    <div className="flex flex-col items-center gap-4 text-amber-600">
-                      <AlertCircle className="w-8 h-8" />
-                      <span className="text-sm text-center">{audioError}</span>
-                      {isTTSSupported && test.transcript && (
-                        <Button
-                          variant="outline"
-                          onClick={() => isTTSSpeaking ? stopTTS() : speakTTS(test.transcript!)}
-                          className="gap-2"
-                        >
-                          {isTTSSpeaking ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                          {isTTSSpeaking ? 'Stop Reading' : 'Read Transcript Aloud'}
-                        </Button>
-                      )}
+                  {audioError === 'tts_fallback' && test.transcript ? (
+                    <div className="w-full max-w-md">
+                      <SimulatedAudioPlayer
+                        text={test.transcript}
+                        onComplete={() => setAudioEnded(true)}
+                      />
                     </div>
+                  ) : audioError ? (
+                    <span className="text-sm text-destructive text-center">{audioError}</span>
                   ) : (
                     <div className="w-full max-w-md flex flex-col items-center gap-4">
                       <Button
