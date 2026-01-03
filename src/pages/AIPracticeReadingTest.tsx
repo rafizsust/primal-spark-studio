@@ -108,10 +108,14 @@ export default function AIPracticeReadingTest() {
     // Convert AI passage to expected format
     // Check if this is a matching headings test - show labels if so
     const isMatchingHeadings = loadedTest.questionGroups?.some(g => g.question_type === 'MATCHING_HEADINGS');
-    
+
+    // NOTE: Admin/bulk presets may omit passage.id; the renderer relies on passage.id to
+    // associate questions with the passage. So we generate a stable fallback id.
+    const passageId = (loadedTest.passage as any)?.id || loadedTest.id || 'passage-1';
+
     if (loadedTest.passage) {
       const passage: Passage = {
-        id: loadedTest.passage.id,
+        id: passageId,
         passage_number: 1,
         title: loadedTest.passage.title,
         content: loadedTest.passage.content,
@@ -143,7 +147,7 @@ export default function AIPracticeReadingTest() {
 
       loadedTest.questionGroups.forEach((group) => {
         const groupType = normalizeType(group.question_type);
-        
+
         // Skip groups with invalid/missing question_type
         if (!groupType) {
           console.error('Skipping question group with missing question_type:', group.id);
@@ -172,7 +176,7 @@ export default function AIPracticeReadingTest() {
             options: (q as any).options || null,
             correct_answer: q.correct_answer,
             instruction: null,
-            passage_id: loadedTest.passage?.id || '',
+            passage_id: passageId,
             question_group_id: group.id,
             heading: q.heading || null,
             table_data: tableData,

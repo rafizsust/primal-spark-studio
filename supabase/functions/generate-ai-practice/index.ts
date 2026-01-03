@@ -2067,6 +2067,37 @@ serve(async (req) => {
           // Reading preset response
           const normalizeType = (raw: unknown) => String(raw ?? '').trim().toUpperCase();
 
+          const normalizePassage = (raw: any) => {
+            // Bulk/admin presets often store {title, content} without an id.
+            // The test-taker renderer relies on passage.id to attach questions to the passage.
+            const content =
+              typeof raw === 'string'
+                ? raw
+                : typeof raw?.content === 'string'
+                  ? raw.content
+                  : typeof payload?.passageContent === 'string'
+                    ? payload.passageContent
+                    : '';
+
+            const title =
+              typeof raw === 'object' && typeof raw?.title === 'string'
+                ? raw.title
+                : typeof payload?.title === 'string'
+                  ? payload.title
+                  : preset.topic;
+
+            const id = typeof raw === 'object' && typeof raw?.id === 'string' && raw.id.trim()
+              ? raw.id
+              : crypto.randomUUID();
+
+            return {
+              id,
+              title,
+              content,
+              passage_number: 1,
+            };
+          };
+
           const buildGroup = (g: any, fallbackType: string) => {
             const type = normalizeType(g?.question_type || fallbackType || questionType);
             const qsRaw: any[] = Array.isArray(g?.questions)
@@ -2075,7 +2106,21 @@ serve(async (req) => {
                 ? payload.questions
                 : [];
 
-            const groupOptions: any = g?.options ?? payload.options ?? {};
+            let groupOptions: any = g?.options ?? payload.options ?? {};
+
+            // Ensure bulk/admin presets for MATCHING_HEADINGS carry headings into group options
+            // so the reading renderer can display the heading bank.
+            if (type === 'MATCHING_HEADINGS' && Array.isArray(payload.headings)) {
+              if (Array.isArray(groupOptions)) {
+                groupOptions = { options: groupOptions };
+              }
+              if (!groupOptions || typeof groupOptions !== 'object') {
+                groupOptions = {};
+              }
+              if (!Array.isArray(groupOptions.headings)) {
+                groupOptions = { ...groupOptions, headings: payload.headings };
+              }
+            }
 
             const questions = qsRaw.map((q: any, idx: number) => {
               const qType = normalizeType(q?.question_type || type);
@@ -2115,11 +2160,7 @@ serve(async (req) => {
           const responsePayload = {
             testId: `preset-${preset.id}`,
             topic: preset.topic,
-            passage: payload.passage || {
-              id: crypto.randomUUID(),
-              title: preset.topic,
-              content: payload.passageContent || '',
-            },
+            passage: normalizePassage(payload.passage),
             questionGroups: groups,
             isPreset: true,
             presetId: preset.id,
