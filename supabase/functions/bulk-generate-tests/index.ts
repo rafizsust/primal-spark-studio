@@ -578,7 +578,8 @@ function getPromptForModule(
   monologue: boolean
 ): string {
   const difficultyDesc = difficulty === "easy" ? "Band 5.5-6.5" : difficulty === "medium" ? "Band 7-8" : "Band 8.5-9";
-  const questionCount = 7; // Fixed per requirements
+  // MCMA uses 3 questions (user selects 3 answers), all other types use 7
+  const questionCount = questionType === "MULTIPLE_CHOICE_MULTIPLE" ? 3 : 7;
   const paragraphCount = 4; // Fixed per requirements
 
   switch (module) {
@@ -639,23 +640,43 @@ Return ONLY valid JSON:
 }`;
 
     case "MULTIPLE_CHOICE_MULTIPLE":
-      // For MCMA: Generate 3 questions where user selects 3 correct answers from 6 options
-      return basePrompt + `Create a multiple choice question where the test-taker must choose THREE correct answers from six options (A-F).
+      // For MCMA: Generate 1 question set spanning question numbers 1-3
+      // User selects 3 correct answers from 6 options (A-F)
+      return basePrompt + `Create a multiple choice question set where the test-taker must choose THREE correct answers from six options (A-F).
 
 CRITICAL REQUIREMENTS:
-- Generate exactly 3 correct answers (e.g., A, C, E)
-- Generate exactly 6 options total (A through F)
-- The question should ask about the passage content
-- Each option must be a complete, distinct statement
+- This question set spans Questions 1 to 3 (3 question numbers)
+- Generate exactly 6 options (A through F)
+- Generate exactly 3 correct answer letters (e.g., "A,C,E")
+- Return exactly 3 question objects with question_number 1, 2, and 3
+- ALL 3 question objects must have IDENTICAL content (same question_text, same options, same correct_answer)
+- The correct_answer is a comma-separated list of 3 letters (e.g., "A,C,E")
+- DO NOT always use A,C,E - randomize which 3 options are correct
 
 Return ONLY valid JSON:
 {
-  "passage": {"title": "Title", "content": "Full passage with detailed information"},
-  "instruction": "Choose THREE letters, A-F.",
+  "passage": {"title": "Title", "content": "Full passage with paragraph labels [A], [B], etc."},
+  "instruction": "Questions 1-3. Choose THREE letters, A-F.",
   "max_answers": 3,
   "questions": [
     {
       "question_number": 1,
+      "question_text": "Which THREE of the following statements are true according to the passage?",
+      "options": ["A First statement", "B Second statement", "C Third statement", "D Fourth statement", "E Fifth statement", "F Sixth statement"],
+      "correct_answer": "A,C,E",
+      "max_answers": 3,
+      "explanation": "A is correct because..., C is correct because..., E is correct because..."
+    },
+    {
+      "question_number": 2,
+      "question_text": "Which THREE of the following statements are true according to the passage?",
+      "options": ["A First statement", "B Second statement", "C Third statement", "D Fourth statement", "E Fifth statement", "F Sixth statement"],
+      "correct_answer": "A,C,E",
+      "max_answers": 3,
+      "explanation": "A is correct because..., C is correct because..., E is correct because..."
+    },
+    {
+      "question_number": 3,
       "question_text": "Which THREE of the following statements are true according to the passage?",
       "options": ["A First statement", "B Second statement", "C Third statement", "D Fourth statement", "E Fifth statement", "F Sixth statement"],
       "correct_answer": "A,C,E",

@@ -486,7 +486,8 @@ export default function AIPractice() {
         speakingParts: data.speakingParts,
         totalQuestions: activeModule === 'writing' ? 1 : 
           activeModule === 'speaking' ? (data.speakingParts?.reduce((acc: number, p: any) => acc + (p.questions?.length || 0), 0) || 0) : 
-          questionCount,
+          // For MCMA, totalQuestions is always 3 (standardized)
+          (activeModule === 'reading' && currentQuestionType === 'MULTIPLE_CHOICE_MULTIPLE') ? 3 : questionCount,
         generatedAt: new Date().toISOString(),
       };
 

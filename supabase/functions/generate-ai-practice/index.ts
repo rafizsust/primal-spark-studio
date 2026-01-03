@@ -979,21 +979,19 @@ Return ONLY valid JSON in this exact format:
 }`;
 
     case 'MULTIPLE_CHOICE_MULTIPLE':
-      // For MCQ Multiple, we create ONE question "set" where test-takers must pick N answers.
-      // We represent it as a single question group spanning N question numbers (e.g., Questions 1-2) so UI counts correctly.
-      // questionCount here represents the number of answers to select (e.g., 2 or 3)
-      const numAnswersToSelect = Math.min(questionCount, 3); // Cap at 3 to keep it reasonable
-      const answerWord = numAnswersToSelect === 2 ? 'TWO' : numAnswersToSelect === 3 ? 'THREE' : String(numAnswersToSelect);
+      // For MCQ Multiple, we create ONE question "set" where test-takers must pick 3 answers.
+      // The question group spans 3 question numbers (Questions 1-3) with 6 options (A-F).
+      // This is the standardized MCMA format for AI practice.
 
-      return basePrompt + `2. Create ONE multiple choice question where test-takers must select ${answerWord} correct answers from the options.
+      return basePrompt + `2. Create ONE multiple choice question set where test-takers must select THREE correct answers from six options (A-F).
 
-IMPORTANT:
-- The question group spans ${numAnswersToSelect} question numbers: 1 to ${numAnswersToSelect}
-- Return ${numAnswersToSelect} question objects with question_number 1..${numAnswersToSelect}
-- ALL question objects must have the SAME question_text, SAME options, SAME correct_answer, SAME explanation
-- The correct_answer must be a comma-separated list of ${numAnswersToSelect} letters (e.g., "B,D" or "A,C,E")
-- DO NOT always use the same letters - randomize which options are correct
-- Provide 5-6 options total so there are distractors
+CRITICAL REQUIREMENTS:
+- The question set spans Questions 1 to 3 (3 question numbers)
+- Return EXACTLY 3 question objects with question_number 1, 2, and 3
+- ALL 3 question objects must have IDENTICAL content (same question_text, same options, same correct_answer, same explanation)
+- Generate exactly 6 options (A through F)
+- The correct_answer must be a comma-separated list of 3 letters (e.g., "A,C,E" or "B,D,F")
+- DO NOT always use the same letters - randomize which 3 options are correct
 
 Return ONLY valid JSON in this exact format:
 {
@@ -1001,23 +999,32 @@ Return ONLY valid JSON in this exact format:
     "title": "The title of the passage",
     "content": "The full passage text with paragraph labels like [A], [B], etc."
   },
-  "instruction": "Questions 1-${numAnswersToSelect}. Choose ${answerWord} letters, A-E.",
+  "instruction": "Questions 1-3. Choose THREE letters, A-F.",
+  "max_answers": 3,
   "questions": [
     {
       "question_number": 1,
-      "question_text": "Which ${answerWord} of the following statements are supported by information in the passage?",
-      "options": ["A First option", "B Second option", "C Third option", "D Fourth option", "E Fifth option"],
-      "correct_answer": "B,D",
-      "explanation": "B is correct because... D is correct because...",
-      "max_answers": ${numAnswersToSelect}
+      "question_text": "Which THREE of the following statements are true according to the passage?",
+      "options": ["A First option", "B Second option", "C Third option", "D Fourth option", "E Fifth option", "F Sixth option"],
+      "correct_answer": "A,C,E",
+      "explanation": "A is correct because... C is correct because... E is correct because...",
+      "max_answers": 3
     },
     {
-      "question_number": ${numAnswersToSelect},
-      "question_text": "Which ${answerWord} of the following statements are supported by information in the passage?",
-      "options": ["A First option", "B Second option", "C Third option", "D Fourth option", "E Fifth option"],
-      "correct_answer": "B,D",
-      "explanation": "B is correct because... D is correct because...",
-      "max_answers": ${numAnswersToSelect}
+      "question_number": 2,
+      "question_text": "Which THREE of the following statements are true according to the passage?",
+      "options": ["A First option", "B Second option", "C Third option", "D Fourth option", "E Fifth option", "F Sixth option"],
+      "correct_answer": "A,C,E",
+      "explanation": "A is correct because... C is correct because... E is correct because...",
+      "max_answers": 3
+    },
+    {
+      "question_number": 3,
+      "question_text": "Which THREE of the following statements are true according to the passage?",
+      "options": ["A First option", "B Second option", "C Third option", "D Fourth option", "E Fifth option", "F Sixth option"],
+      "correct_answer": "A,C,E",
+      "explanation": "A is correct because... C is correct because... E is correct because...",
+      "max_answers": 3
     }
   ]
 }`;
@@ -1967,8 +1974,11 @@ serve(async (req) => {
               ? payload.questionGroups.map((g: any) => buildGroup(g, topLevelType))
               : [buildGroup({ questions: payload.questions, options: payload.options }, topLevelType)];
 
+            // Generate unique testId for each preset run to avoid PK collisions in ai_practice_tests
+            const uniqueListeningTestId = `preset-${preset.id}-${crypto.randomUUID()}`;
+            
             const responsePayload = {
-              testId: `preset-${preset.id}`,
+              testId: uniqueListeningTestId,
               topic: preset.topic,
               transcript: preset.transcript || payload.dialogue || payload.transcript,
               speakerNames: payload.speaker_names || payload.speakerNames,
@@ -2050,8 +2060,11 @@ serve(async (req) => {
             speakingParts.push(...payload.speakingParts);
           }
           
+          // Generate unique testId for each preset run to avoid PK collisions in ai_practice_tests
+          const uniqueSpeakingTestId = `preset-${preset.id}-${crypto.randomUUID()}`;
+          
           const responsePayload = {
-            testId: `preset-${preset.id}`,
+            testId: uniqueSpeakingTestId,
             topic: preset.topic,
             speakingParts,
             audioUrls: payload.audioUrls, // Pre-generated TTS audio URLs
@@ -2229,8 +2242,11 @@ serve(async (req) => {
             ? payload.questionGroups.map((g: any) => buildGroup(g, topLevelType))
             : [buildGroup({ questions: payload.questions, options: payload.options }, topLevelType)];
 
+          // Generate unique testId for each preset run to avoid PK collisions in ai_practice_tests
+          const uniqueTestId = `preset-${preset.id}-${crypto.randomUUID()}`;
+          
           const responsePayload = {
-            testId: `preset-${preset.id}`,
+            testId: uniqueTestId,
             topic: preset.topic,
             passage: normalizePassage(payload.passage),
             questionGroups: groups,
@@ -2244,8 +2260,11 @@ serve(async (req) => {
           });
         } else if (module === 'writing') {
           // Writing preset response
+          // Generate unique testId for each preset run to avoid PK collisions in ai_practice_tests
+          const uniqueWritingTestId = `preset-${preset.id}-${crypto.randomUUID()}`;
+          
           const responsePayload = {
-            testId: `preset-${preset.id}`,
+            testId: uniqueWritingTestId,
             topic: preset.topic,
             writingTask: payload.writingTask || payload,
             isPreset: true,
@@ -2350,6 +2369,15 @@ serve(async (req) => {
         groupOptions = { headings: parsed.headings };
       } else if (questionType === 'MATCHING_INFORMATION' && parsed.options) {
         groupOptions = { options: parsed.options };
+      } else if (questionType === 'MULTIPLE_CHOICE_MULTIPLE' && parsed.questions?.[0]?.options) {
+        // MCMA: Include options and max_answers in groupOptions for the renderer
+        const mcmaOptions = parsed.questions[0].options;
+        const mcmaMaxAnswers = parsed.max_answers ?? parsed.questions[0]?.max_answers ?? 3;
+        groupOptions = { 
+          options: mcmaOptions, 
+          max_answers: mcmaMaxAnswers,
+          option_format: 'A'
+        };
       } else if (questionType.includes('MULTIPLE_CHOICE') && parsed.questions?.[0]?.options) {
         groupOptions = { options: parsed.questions[0].options };
       } else if ((questionType === 'SUMMARY_COMPLETION' || questionType === 'SUMMARY_WORD_BANK') && (parsed.summary_text || parsed.word_bank)) {
@@ -2390,7 +2418,11 @@ serve(async (req) => {
         explanation: q.explanation,
         options: q.options || null,
         heading: q.heading || null,
+        max_answers: questionType === 'MULTIPLE_CHOICE_MULTIPLE' ? (q.max_answers ?? 3) : undefined,
       }));
+
+      // For MCMA, ensure we have exactly 3 questions and end_question is 3
+      const endQuestion = questionType === 'MULTIPLE_CHOICE_MULTIPLE' ? 3 : questions.length;
 
       const responsePayload = {
         testId,
@@ -2402,10 +2434,10 @@ serve(async (req) => {
         },
         questionGroups: [{
           id: groupId,
-          instruction: parsed.instruction || `Questions 1-${questions.length}`,
+          instruction: parsed.instruction || `Questions 1-${endQuestion}`,
           question_type: questionType,
           start_question: 1,
-          end_question: questions.length,
+          end_question: endQuestion,
           options: groupOptions,
           questions,
         }],
