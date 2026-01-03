@@ -397,20 +397,25 @@ async function processGenerationJob(
       }
 
       // Save to generated_test_audio table
-      const testData = {
+      // Only include voice/accent for modules that use audio (listening, speaking)
+      const testData: any = {
         job_id: jobId,
         module,
         topic,
         difficulty,
         question_type: currentQuestionType,
-        voice_id: voiceName,
-        accent,
         content_payload: content,
         audio_url: audioUrl,
         transcript: content.dialogue || content.script || null,
         status: module === "listening" && !audioUrl ? "failed" : "ready",
         is_published: false,
       };
+
+      // Only add voice configuration for audio-based modules
+      if (module === "listening" || module === "speaking") {
+        testData.voice_id = voiceName;
+        testData.accent = accent;
+      }
 
       const { error: insertError } = await supabase
         .from("generated_test_audio")
@@ -484,6 +489,7 @@ function getQuestionTypesForModule(module: string, selectedType: string): string
         "SENTENCE_COMPLETION",
         "SUMMARY_WORD_BANK",
         "SHORT_ANSWER",
+        "TABLE_COMPLETION",
       ];
     case "listening":
       return [
@@ -737,6 +743,44 @@ Return ONLY valid JSON:
     {"question_number": 2, "question_text": "Gap 2", "correct_answer": "C", "explanation": "Research is mentioned as crucial"},
     {"question_number": 3, "question_text": "Gap 3", "correct_answer": "E", "explanation": "Climate is identified as key factor"},
     {"question_number": 4, "question_text": "Gap 4", "correct_answer": "B", "explanation": "Environment remains a concern"}
+  ]
+}`;
+
+    case "TABLE_COMPLETION":
+      return basePrompt + `Create a table completion task with ${questionCount} blanks to fill.
+
+CRITICAL RULES - FOLLOW EXACTLY:
+1. WORD LIMIT: Maximum TWO words per answer. STRICTLY ENFORCED.
+   - Every answer MUST be 1 or 2 words maximum
+   - NEVER use 3+ word answers - this violates IELTS standards
+   - Vary the lengths naturally: mix of 1-word and 2-word answers
+   - Example valid answers: "pollution" (1 word), "water supply" (2 words)
+   - Example INVALID: "clean water supply" (3 words - NEVER DO THIS)
+2. Tables MUST have EXACTLY 3 COLUMNS (no more, no less).
+3. Use inline blanks with __ (double underscores) within cell content, NOT separate cells for blanks.
+   - Example: "Clean air and water, pollination of crops, and __" where __ is the blank
+4. DISTRIBUTE blanks across BOTH column 2 AND column 3. Do NOT put all blanks only in column 2.
+   - Alternate between putting blanks in the 2nd column and the 3rd column
+   - At least 1/3 of blanks MUST be in the 3rd column
+
+Return ONLY valid JSON in this exact format:
+{
+  "passage": {"title": "Title", "content": "Full passage with paragraph labels [A], [B], etc."},
+  "instruction": "Complete the table below. Choose NO MORE THAN TWO WORDS from the passage for each answer.",
+  "table_data": [
+    [{"content": "Category", "is_header": true}, {"content": "Details", "is_header": true}, {"content": "Impact/Challenge", "is_header": true}],
+    [{"content": "First item"}, {"content": "Description text and __", "has_question": true, "question_number": 1}, {"content": "Positive effect"}],
+    [{"content": "Second item"}, {"content": "More text here"}, {"content": "Results in __", "has_question": true, "question_number": 2}],
+    [{"content": "Third item"}, {"content": "Additional info about __", "has_question": true, "question_number": 3}, {"content": "Significant"}],
+    [{"content": "Fourth item"}, {"content": "Details here"}, {"content": "Has __", "has_question": true, "question_number": 4}],
+    [{"content": "Fifth item"}, {"content": "Uses __ method", "has_question": true, "question_number": 5}, {"content": "Effective"}]
+  ],
+  "questions": [
+    {"question_number": 1, "question_text": "Fill in blank 1", "correct_answer": "resources", "explanation": "Found in paragraph B"},
+    {"question_number": 2, "question_text": "Fill in blank 2", "correct_answer": "water scarcity", "explanation": "Found in paragraph C"},
+    {"question_number": 3, "question_text": "Fill in blank 3", "correct_answer": "deforestation", "explanation": "Found in paragraph D"},
+    {"question_number": 4, "question_text": "Fill in blank 4", "correct_answer": "limitations", "explanation": "Found in paragraph E"},
+    {"question_number": 5, "question_text": "Fill in blank 5", "correct_answer": "solar", "explanation": "Found in paragraph A"}
   ]
 }`;
 
