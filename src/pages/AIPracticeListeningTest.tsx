@@ -138,6 +138,7 @@ export default function AIPracticeListeningTest() {
   const [audioProgress, setAudioProgress] = useState(0);
   const [audioReady, setAudioReady] = useState(false);
   const [audioError, setAudioError] = useState<string | null>(null);
+  const [_audioSource, setAudioSource] = useState<'r2' | 'tts' | null>(null); // Track audio source for debugging
   const [playbackSpeed, setPlaybackSpeed] = useState(1);
   const [audioEnded, setAudioEnded] = useState(false);
   const [reviewTimeLeft, setReviewTimeLeft] = useState(30);
@@ -169,9 +170,12 @@ export default function AIPracticeListeningTest() {
     setTimeLeft(loadedTest.timeMinutes * 60);
     startTimeRef.current = Date.now();
 
-    // Setup audio if available
+    // Setup audio if available - PRIORITY: base64 > audio_url > audioUrl > transcript TTS
+    const resolvedAudioUrl = loadedTest.audioUrl || (loadedTest as any).audio_url;
+    
     if (loadedTest.audioBase64) {
       try {
+        console.log('[AIPracticeListening] Using base64 audio from memory');
         const pcmBytes = Uint8Array.from(atob(loadedTest.audioBase64), c => c.charCodeAt(0));
         const wavBlob = pcmToWav(pcmBytes, loadedTest.sampleRate || 24000);
         const url = URL.createObjectURL(wavBlob);
@@ -181,7 +185,10 @@ export default function AIPracticeListeningTest() {
         audioRef.current = audio;
 
         audio.playbackRate = playbackSpeed;
-        audio.addEventListener('canplaythrough', () => setAudioReady(true));
+        audio.addEventListener('canplaythrough', () => {
+          setAudioReady(true);
+          setAudioSource('r2');
+        });
         audio.addEventListener('timeupdate', () => {
           setAudioProgress((audio.currentTime / audio.duration) * 100 || 0);
         });
@@ -189,16 +196,35 @@ export default function AIPracticeListeningTest() {
           setIsPlaying(false);
           setAudioEnded(true);
         });
-        audio.addEventListener('error', () => setAudioError('Failed to load audio'));
-      } catch {
-        setAudioError('Audio generation failed. You can still practice with the transcript.');
+        audio.addEventListener('error', () => {
+          console.warn('[AIPracticeListening] Base64 audio failed, falling back to TTS');
+          if (loadedTest.transcript) {
+            setAudioError('tts_fallback');
+            setAudioSource('tts');
+          } else {
+            setAudioError('Failed to load audio');
+          }
+        });
+      } catch (err) {
+        console.error('[AIPracticeListening] Base64 conversion failed:', err);
+        if (loadedTest.transcript) {
+          setAudioError('tts_fallback');
+          setAudioSource('tts');
+        } else {
+          setAudioError('Audio generation failed.');
+        }
       }
-    } else if (loadedTest.audioUrl) {
-      const audio = new Audio(loadedTest.audioUrl);
+    } else if (resolvedAudioUrl) {
+      console.log('[AIPracticeListening] Using R2 audio URL:', resolvedAudioUrl);
+      const audio = new Audio(resolvedAudioUrl);
       audioRef.current = audio;
 
       audio.playbackRate = playbackSpeed;
-      audio.addEventListener('canplaythrough', () => setAudioReady(true));
+      audio.addEventListener('canplaythrough', () => {
+        console.log('[AIPracticeListening] R2 audio ready');
+        setAudioReady(true);
+        setAudioSource('r2');
+      });
       audio.addEventListener('timeupdate', () => {
         setAudioProgress((audio.currentTime / audio.duration) * 100 || 0);
       });
@@ -206,12 +232,23 @@ export default function AIPracticeListeningTest() {
         setIsPlaying(false);
         setAudioEnded(true);
       });
-      audio.addEventListener('error', () => setAudioError('Failed to load audio'));
+      audio.addEventListener('error', (e) => {
+        console.warn('[AIPracticeListening] R2 audio failed, falling back to TTS:', e);
+        if (loadedTest.transcript) {
+          setAudioError('tts_fallback');
+          setAudioSource('tts');
+        } else {
+          setAudioError('Failed to load audio');
+        }
+      });
     } else if (loadedTest.transcript) {
       // No audio available but transcript exists - use TTS simulation
+      console.log('[AIPracticeListening] No audio URL, using TTS fallback');
       setAudioError('tts_fallback');
+      setAudioSource('tts');
     } else {
       // No audio and no transcript - critical error
+      console.error('[AIPracticeListening] No audio or transcript available');
       setAudioError('Audio content not available.');
     }
 
