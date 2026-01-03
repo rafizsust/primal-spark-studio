@@ -2122,6 +2122,47 @@ serve(async (req) => {
               }
             }
 
+            // For MULTIPLE_CHOICE_MULTIPLE: Extract max_answers from first question and propagate to group options
+            // This ensures the renderer shows correct "Select X answers" instruction
+            if (type === 'MULTIPLE_CHOICE_MULTIPLE') {
+              // Ensure groupOptions is an object
+              if (Array.isArray(groupOptions)) {
+                groupOptions = { options: groupOptions };
+              }
+              if (!groupOptions || typeof groupOptions !== 'object') {
+                groupOptions = {};
+              }
+              
+              // Get max_answers from first question, group options, or infer from question text
+              const firstQ = qsRaw[0];
+              const explicitMax = firstQ?.max_answers ?? g?.max_answers ?? groupOptions?.max_answers;
+              
+              if (explicitMax) {
+                groupOptions = { ...groupOptions, max_answers: explicitMax };
+              } else if (firstQ?.question_text) {
+                // Infer from question text (e.g., "Which THREE statements...")
+                const text = firstQ.question_text;
+                const match = text.match(/\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b\s+(?:statements|answers|options|letters?|of the following)\b/i)
+                  || text.match(/\bwhich\s+(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\b/i);
+                if (match) {
+                  const raw = match[1].toLowerCase();
+                  const wordMap: Record<string, number> = {
+                    one: 1, two: 2, three: 3, four: 4, five: 5,
+                    six: 6, seven: 7, eight: 8, nine: 9, ten: 10
+                  };
+                  const inferred = wordMap[raw] ?? parseInt(raw, 10);
+                  if (inferred > 0) {
+                    groupOptions = { ...groupOptions, max_answers: inferred };
+                  }
+                }
+              }
+              
+              // Also ensure options array is properly set for checkboxes
+              if (!groupOptions.options && firstQ?.options && Array.isArray(firstQ.options)) {
+                groupOptions = { ...groupOptions, options: firstQ.options };
+              }
+            }
+
             const questions = qsRaw.map((q: any, idx: number) => {
               const qType = normalizeType(q?.question_type || type);
               return {
