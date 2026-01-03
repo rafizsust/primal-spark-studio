@@ -469,6 +469,25 @@ export async function loadGeneratedTestAsync(testId: string): Promise<GeneratedT
   }
 
   const payload = data.payload as unknown as GeneratedTest;
+  
+  // ===== RCA DIAGNOSTIC: Log the full DB row to verify audio_url presence =====
+  console.log('[RCA] Full DB row for test', testId, ':', JSON.stringify(data, null, 2));
+  console.log('[RCA] Payload object:', JSON.stringify(payload, null, 2));
+  
+  // Audio URL resolution chain: DB column > payload.audioUrl > payload.audio_url
+  const resolvedAudioUrl = 
+    (data as any).audio_url || 
+    payload.audioUrl || 
+    (payload as any).audio_url || 
+    undefined;
+    
+  console.log('[RCA] Audio URL resolution:', {
+    dbColumn: (data as any).audio_url,
+    payloadAudioUrl: payload.audioUrl,
+    payloadAudio_url: (payload as any).audio_url,
+    resolved: resolvedAudioUrl
+  });
+
   const test: GeneratedTest = {
     ...payload,
     id: data.id,
@@ -479,8 +498,8 @@ export async function loadGeneratedTestAsync(testId: string): Promise<GeneratedT
     timeMinutes: data.time_minutes,
     totalQuestions: data.total_questions,
     generatedAt: data.generated_at,
-    // Prefer persisted column, but keep payload audioUrl for presets
-    audioUrl: ((data as any).audio_url ?? payload.audioUrl) ?? undefined,
+    // Use resolved audio URL from chain
+    audioUrl: resolvedAudioUrl,
     audioFormat: data.audio_format ?? payload.audioFormat ?? undefined,
     sampleRate: data.sample_rate ?? payload.sampleRate ?? undefined,
   };
