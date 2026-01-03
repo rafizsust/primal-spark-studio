@@ -64,21 +64,57 @@ export function FlowchartCompletion({
 
                 {/* Content */}
                 {step.isBlank && step.questionNumber ? (
-                  <div className="space-y-2">
-                    <span className="text-muted-foreground text-sm">{step.label}</span>
-                    <Input
-                      type="text"
-                      value={answer || ''}
-                      onChange={(e) => onAnswerChange(step.questionNumber!, e.target.value)}
-                      placeholder={String(step.questionNumber)}
-                      className={cn(
-                        "h-7 text-sm min-w-[174px] max-w-full rounded-[3px] text-center placeholder:font-bold placeholder:text-foreground/70",
-                        isActive
-                          ? "border-primary focus:ring-primary"
-                          : "border-border"
-                      )}
-                      onClick={(e) => e.stopPropagation()}
-                    />
+                  <div className="text-muted-foreground text-sm leading-relaxed">
+                    {(() => {
+                      // Parse label to find blank marker like (3) or similar patterns
+                      const blankPattern = new RegExp(`\\(${step.questionNumber}\\)|\\[${step.questionNumber}\\]|_{2,}|\\.\\.\\.|______`);
+                      const match = step.label.match(blankPattern);
+                      
+                      if (match && match.index !== undefined) {
+                        const before = step.label.substring(0, match.index);
+                        const after = step.label.substring(match.index + match[0].length);
+                        
+                        return (
+                          <span className="inline">
+                            {before}
+                            <Input
+                              type="text"
+                              value={answer || ''}
+                              onChange={(e) => onAnswerChange(step.questionNumber!, e.target.value)}
+                              placeholder={String(step.questionNumber)}
+                              className={cn(
+                                "inline-block h-6 w-20 text-xs rounded-[3px] text-center placeholder:font-bold placeholder:text-foreground/70 mx-1 align-baseline",
+                                isActive
+                                  ? "border-primary focus:ring-primary"
+                                  : "border-border"
+                              )}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            {after}
+                          </span>
+                        );
+                      }
+                      
+                      // Fallback: show label with input below if no marker found
+                      return (
+                        <>
+                          <span>{step.label}</span>
+                          <Input
+                            type="text"
+                            value={answer || ''}
+                            onChange={(e) => onAnswerChange(step.questionNumber!, e.target.value)}
+                            placeholder={String(step.questionNumber)}
+                            className={cn(
+                              "h-7 text-sm min-w-[100px] max-w-full rounded-[3px] text-center placeholder:font-bold placeholder:text-foreground/70 mt-2",
+                              isActive
+                                ? "border-primary focus:ring-primary"
+                                : "border-border"
+                            )}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <span className="text-foreground font-medium">{step.label}</span>
