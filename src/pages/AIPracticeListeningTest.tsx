@@ -16,7 +16,7 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { cn } from '@/lib/utils';
-import { checkAnswer } from '@/lib/ieltsAnswerValidation';
+
 import { HighlightNoteProvider } from '@/hooks/useHighlightNotes';
 import { NoteSidebar } from '@/components/common/NoteSidebar';
 import { SubmitConfirmDialog } from '@/components/common/SubmitConfirmDialog';
@@ -621,144 +621,85 @@ export default function AIPracticeListeningTest() {
 
     const timeSpent = Math.floor((Date.now() - startTimeRef.current) / 1000);
 
-    // Build question results with MCMA group handling (matching reading implementation)
-    const questionResults: QuestionResult[] = [];
-    const processedQuestionNumbers = new Set<number>();
+    try {
+      console.log("Submitting listening test...");
 
-    // Process MCMA groups first (one result per group with partial scoring)
-    for (const group of questionGroups) {
-      if (group.question_type === 'MULTIPLE_CHOICE_MULTIPLE') {
-        const rangeNumbers: number[] = [];
-        for (let n = group.start_question; n <= group.end_question; n++) {
-          rangeNumbers.push(n);
-          processedQuestionNumbers.add(n);
+      // 1. Calculate Score Locally
+      let correctCount = 0;
+      questions.forEach((q) => {
+        const userVal = answers[q.question_number];
+        if (!userVal) return;
+        
+        const normUser = String(userVal).trim().toLowerCase();
+        const normCorrect = String(q.correct_answer).trim().toLowerCase();
+        
+        // Check exact match or list match
+        if (normUser === normCorrect || normCorrect.split(';').map(a => a.trim().toLowerCase()).includes(normUser)) {
+          correctCount++;
         }
-
-        // User's answer is stored on start_question only
-        const userAnswerRaw = answers[group.start_question]?.trim() || '';
-        const userLetters = userAnswerRaw
-          .split(',')
-          .map(s => s.trim().toUpperCase())
-          .filter(Boolean);
-
-        // Get correct answers from the saved test payload
-        const firstQFromTest = test.questionGroups?.flatMap(g => g.questions).find(
-          (oq) => oq.question_number === group.start_question
-        );
-        const correctAnswerRaw = firstQFromTest?.correct_answer || '';
-        const correctLetters = correctAnswerRaw
-          .split(',')
-          .map(s => s.trim().toUpperCase())
-          .filter(Boolean);
-
-        // Partial scoring: count how many user selections are correct
-        const correctSelections = userLetters.filter(l => correctLetters.includes(l));
-        const partialScore = correctSelections.length;
-        const maxScore = correctLetters.length;
-        const isFullyCorrect = partialScore === maxScore && userLetters.length === maxScore;
-
-        questionResults.push({
-          questionNumber: group.start_question,
-          questionNumbers: rangeNumbers,
-          userAnswer: userLetters.join(','),
-          correctAnswer: correctLetters.join(','),
-          isCorrect: isFullyCorrect,
-          partialScore,
-          maxScore,
-          explanation: firstQFromTest?.explanation || '',
-          questionType: 'MULTIPLE_CHOICE_MULTIPLE',
-        });
-      }
-    }
-
-    // Process remaining questions (non-MCMA)
-    for (const q of questions) {
-      if (processedQuestionNumbers.has(q.question_number)) continue;
-
-      const userAnswer = answers[q.question_number]?.trim() || '';
-      const correctAnswer =
-        test.questionGroups?.flatMap(g => g.questions).find(
-          (oq) => oq.question_number === q.question_number
-        )?.correct_answer ?? q.correct_answer;
-
-      const questionType = q.question_type ||
-        test.questionGroups?.find(g =>
-          g.questions.some(gq => gq.question_number === q.question_number)
-        )?.question_type;
-
-      const isCorrect = checkAnswer(userAnswer, correctAnswer, questionType);
-
-      const originalQ = test.questionGroups?.flatMap(g => g.questions).find(
-        oq => oq.question_number === q.question_number
-      );
-
-      questionResults.push({
-        questionNumber: q.question_number,
-        userAnswer,
-        correctAnswer,
-        isCorrect,
-        explanation: originalQ?.explanation || '',
-        questionType,
       });
-    }
 
-    // Sort by question number
-    questionResults.sort((a, b) => a.questionNumber - b.questionNumber);
+      // 2. Calculate Band Score (IELTS Listening Table)
+      let bandScore = 0;
+      if (correctCount >= 39) bandScore = 9;
+      else if (correctCount >= 37) bandScore = 8.5;
+      else if (correctCount >= 35) bandScore = 8;
+      else if (correctCount >= 32) bandScore = 7.5;
+      else if (correctCount >= 30) bandScore = 7;
+      else if (correctCount >= 26) bandScore = 6.5;
+      else if (correctCount >= 23) bandScore = 6;
+      else if (correctCount >= 18) bandScore = 5.5;
+      else if (correctCount >= 16) bandScore = 5;
+      else bandScore = 4;
 
-    // Calculate score: sum partial scores for MCMA, 1 for correct others
-    let score = 0;
-    let total = 0;
-    for (const r of questionResults) {
-      if (r.questionType === 'MULTIPLE_CHOICE_MULTIPLE' && r.maxScore !== undefined) {
-        score += r.partialScore || 0;
-        total += r.maxScore;
-      } else {
-        if (r.isCorrect) score += 1;
-        total += 1;
+      // 3. Build question results for results page
+      const questionResults: QuestionResult[] = questions.map((q) => {
+        const userAnswer = answers[q.question_number]?.trim() || '';
+        const correctAnswer = q.correct_answer;
+        const normUser = userAnswer.toLowerCase();
+        const normCorrect = String(correctAnswer).trim().toLowerCase();
+        const isCorrect = normUser === normCorrect || 
+          normCorrect.split(';').map(a => a.trim().toLowerCase()).includes(normUser);
+
+        return {
+          questionNumber: q.question_number,
+          userAnswer,
+          correctAnswer,
+          isCorrect,
+          explanation: '',
+          questionType: q.question_type,
+        };
+      });
+
+      // Sort by question number
+      questionResults.sort((a, b) => a.questionNumber - b.questionNumber);
+
+      const result: PracticeResult = {
+        testId: test.id,
+        answers,
+        score: correctCount,
+        totalQuestions: questions.length,
+        bandScore,
+        completedAt: new Date().toISOString(),
+        timeSpent,
+        questionResults,
+      };
+
+      if (user) {
+        await savePracticeResultAsync(result, user.id, 'listening');
+        // Track topic completion
+        if (test.topic) {
+          incrementCompletion(test.topic);
+        }
       }
+
+      // 4. Navigate to Results Page
+      navigate(`/ai-practice/results/${test.id}`);
+
+    } catch (error) {
+      console.error("Submission failed", error);
+      toast.error("Failed to submit test results.");
     }
-
-    const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
-
-    const calculateBandScore = (pct: number): number => {
-      if (pct >= 93) return 9;
-      if (pct >= 85) return 8.5;
-      if (pct >= 78) return 8;
-      if (pct >= 70) return 7.5;
-      if (pct >= 63) return 7;
-      if (pct >= 55) return 6.5;
-      if (pct >= 48) return 6;
-      if (pct >= 40) return 5.5;
-      if (pct >= 33) return 5;
-      if (pct >= 25) return 4.5;
-      if (pct >= 18) return 4;
-      if (pct >= 13) return 3.5;
-      if (pct >= 8) return 3;
-      return 2.5;
-    };
-
-    const bandScore = calculateBandScore(percentage);
-
-    const result: PracticeResult = {
-      testId: test.id,
-      answers,
-      score,
-      totalQuestions: total,
-      bandScore,
-      completedAt: new Date().toISOString(),
-      timeSpent,
-      questionResults,
-    };
-
-    if (user) {
-      await savePracticeResultAsync(result, user.id, 'listening');
-      // Track topic completion
-      if (test.topic) {
-        incrementCompletion(test.topic);
-      }
-    }
-
-    navigate(`/ai-practice/results/${test.id}`);
   };
 
   const getThemeClasses = () => {

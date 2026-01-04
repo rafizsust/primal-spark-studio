@@ -50,83 +50,25 @@ const stripLeadingQuestionNumber = (text: string, questionNumber: number): strin
   return text.replace(regex, '').trim();
 };
 
-// HELPER: Robust option extractor with JSON Parsing (Handles Arrays, Objects, and JSON Strings)
-const extractOptions = (raw: any): string[] => {
+// HELPER: Deeply parse options to handle DB Strings and AI Objects
+const parseOpts = (raw: any): any[] => {
   if (!raw) return [];
-
-  // Direct array of strings
-  if (Array.isArray(raw)) {
-    // Ensure all elements are strings (filter out objects/nulls)
-    return raw.filter((item): item is string => typeof item === 'string');
-  }
-
-  // Handle nested object from AI/DB { options: [...] }
-  if (typeof raw === 'object') {
-    // Priority 1: raw.options is an array
-    if (Array.isArray(raw.options)) {
-      return raw.options.filter((item: any): item is string => typeof item === 'string');
-    }
-    // Priority 2: Nested { options: { options: [...] } }
-    if (raw.options && typeof raw.options === 'object' && Array.isArray(raw.options.options)) {
-      return raw.options.options.filter((item: any): item is string => typeof item === 'string');
-    }
-    // Priority 3: raw.options is a JSON string
-    if (typeof raw.options === 'string') {
-      return extractOptions(raw.options);
-    }
-  }
-
-  // FIX: Handle stringified JSON (Crucial for Admin Presets stored as text)
+  if (Array.isArray(raw)) return raw;
+  // Handle AI nested format { options: [...] }
+  if (typeof raw === 'object' && raw.options) return parseOpts(raw.options);
+  // Handle DB Stringified JSON format
   if (typeof raw === 'string') {
-    try {
-      const parsed = JSON.parse(raw);
-      return extractOptions(parsed); // Recurse with parsed data
-    } catch (e) {
-      // Not valid JSON - could be a single option string, ignore
-      console.warn('[MCMA] Failed to parse options as JSON:', e);
-    }
+    try { return parseOpts(JSON.parse(raw)); } catch { return []; }
   }
-
   return [];
 };
 
-// HELPER: Parse group options object (handles JSON strings)
-const parseOptionsObject = (raw: any): any => {
-  if (!raw) return null;
-  if (typeof raw === 'string') {
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  }
-  return raw;
+// HELPER: Robust option extractor with JSON Parsing (Handles Arrays, Objects, and JSON Strings)
+const extractOptions = (raw: any): string[] => {
+  const parsed = parseOpts(raw);
+  return parsed.filter((item): item is string => typeof item === 'string');
 };
 
-// HELPER: Infer max answers from instruction text (e.g. "Choose THREE letters")
-const inferMaxAnswersFromText = (text?: string | null): number | null => {
-  if (!text) return null;
-  const upper = text.toUpperCase();
-  const wordMap: Record<string, number> = {
-    ONE: 1,
-    TWO: 2,
-    THREE: 3,
-    FOUR: 4,
-    FIVE: 5,
-    SIX: 6,
-  };
-
-  const wordMatch = upper.match(/\b(ONE|TWO|THREE|FOUR|FIVE|SIX)\b/);
-  if (wordMatch?.[1] && wordMap[wordMatch[1]]) return wordMap[wordMatch[1]];
-
-  const digitMatch = upper.match(/\b(\d+)\b/);
-  if (digitMatch?.[1]) {
-    const n = Number(digitMatch[1]);
-    return Number.isFinite(n) && n > 0 ? n : null;
-  }
-
-  return null;
-};
 
 export function ListeningQuestions({ 
   testId,
@@ -595,67 +537,57 @@ export function ListeningQuestions({
               })()
             ) : group.question_type === 'MULTIPLE_CHOICE_MULTIPLE' ? (
               (() => {
-                // 1. GET DATA
+                // 1. RESOLVE OPTIONS (Deep Parse)
                 const groupOptionsRaw = group.options;
-                const groupOptionsObj: any = parseOptionsObject(groupOptionsRaw) ?? {};
                 const firstQ = groupQuestions[0];
-                
-                // 2. ROBUST OPTION EXTRACTION (Fixes "Missing Options" in Presets)
-                // Priority: 1. Group-level (AI/DB) -> 2. Question-level (Presets)
-                const optionsFromGroup = extractOptions(groupOptionsObj?.options ?? groupOptionsRaw);
-                const optionsFromQuestion = extractOptions((firstQ as any)?.options);
-                
-                // Use whatever valid options we found
-                const mcqOptions = optionsFromGroup.length > 0 ? optionsFromGroup : optionsFromQuestion;
 
-                // 3. CALCULATE VISUAL RANGE + MAX ANSWERS (ROBUST - FIXES "1-1" BUG)
-                // Priority 1: Explicit max_answers from group options
-                let maxAnswers = Number(groupOptionsObj?.max_answers) || 0;
-
-                // Priority 2: Infer from instruction text ("Choose THREE letters")
-                if (!maxAnswers || maxAnswers < 2) {
-                  const inferred = inferMaxAnswersFromText(firstQ?.question_text) || 
-                                   inferMaxAnswersFromText(group.instruction);
-                  if (inferred && inferred >= 2) maxAnswers = inferred;
+                // Try Group Level first, then Question Level (fallback for Presets)
+                let mcqOptions = parseOpts(groupOptionsRaw);
+                if (mcqOptions.length === 0) {
+                  mcqOptions = parseOpts((firstQ as any)?.options);
                 }
 
-                // Priority 3: Infer from DB question range
-                if (!maxAnswers || maxAnswers < 2) {
-                  const range = group.end_question - group.start_question + 1;
-                  // FIX: If range is 1 (common in AI single-obj generation), FORCE it to 2 for MCMA
-                  maxAnswers = range >= 2 ? range : 2;
-                }
+                // 2. FORCE CORRECT NUMBERING (Fix "1-1" bug)
+                // Parse config object to find max_answers
+                const configObj = typeof groupOptionsRaw === 'string' 
+                  ? (() => { try { return JSON.parse(groupOptionsRaw); } catch { return {}; } })()
+                  : groupOptionsRaw;
 
-                // SAFETY: MCMA must allow at least 2 selections
-                if (maxAnswers < 2) maxAnswers = 2;
+                let maxAnswers = Number(configObj?.max_answers);
+
+                // CRITICAL: If maxAnswers is invalid/missing, force it to at least 2
+                // This ensures we never show "Question 1-1" for a multi-choice task
+                if (!maxAnswers || maxAnswers < 2) {
+                   const range = group.end_question - group.start_question + 1;
+                   maxAnswers = range > 1 ? range : 2; 
+                }
 
                 const startQ = group.start_question;
-                const endQ = startQ + maxAnswers - 1;
-                const mcqQuestionRange = `${startQ}-${endQ}`; // Always show range for MCMA
+                const endQ = startQ + maxAnswers - 1; 
+                const mcqQuestionRange = `${startQ}-${endQ}`;
 
-                // 4. INFER FORMAT (A, B, C vs i, ii, iii)
-                const optionFormat =
-                  groupOptionsObj?.option_format || (groupOptionsRaw as any)?.option_format || (firstQ as any)?.option_format || 'A';
+                // Infer format (A, B, C vs i, ii, iii)
+                const optionFormat = configObj?.option_format || (firstQ as any)?.option_format || 'A';
 
                 return (
                   <div key={group.id} className="space-y-6">
-                     <div className="flex items-start gap-3">
+                    <div className="flex items-start gap-3">
                       <div className="flex-1 space-y-3">
-                        {/* Heading with Corrected Range (e.g. Questions 1-3) */}
+                        {/* Heading: Force "Questions 1-3" Label */}
                         {firstQ?.heading && (
-                           <div className="mb-2 font-bold text-foreground">
-                             <QuestionTextWithTools
-                               testId={testId}
-                               contentId={`${firstQ.id}-heading`}
-                               text={firstQ.heading.replace(/Questions?\s+\d+(?:[-–]\d+)?/i, `Questions ${mcqQuestionRange}`)}
-                               fontSize={fontSize}
-                               renderRichText={renderRichText}
-                               isActive={false}
-                             />
-                           </div>
+                          <div className="mb-2 font-bold text-foreground">
+                            <QuestionTextWithTools
+                              testId={testId}
+                              contentId={`${firstQ.id}-heading`}
+                              text={firstQ.heading.replace(/Questions?\s+\d+(?:[-–]\d+)?/i, `Questions ${mcqQuestionRange}`)}
+                              fontSize={fontSize}
+                              renderRichText={renderRichText}
+                              isActive={false}
+                            />
+                          </div>
                         )}
-                        
-                        {/* Question Text (e.g. "Choose TWO letters") */}
+
+                        {/* Question Text */}
                         <QuestionTextWithTools
                           contentId={firstQ.id}
                           testId={testId}
@@ -665,7 +597,7 @@ export function ListeningQuestions({
                           isActive={isActiveGroup}
                         />
 
-                        {/* RENDER INPUT */}
+                        {/* Input Component */}
                         <MultipleChoiceMultiple
                           testId={testId}
                           renderRichText={renderRichText}
@@ -673,7 +605,7 @@ export function ListeningQuestions({
                             id: firstQ.id,
                             question_number: startQ, 
                             question_text: firstQ.question_text,
-                            options: mcqOptions,
+                            options: extractOptions(mcqOptions),
                             option_format: optionFormat,
                           }}
                           answer={answers[startQ]}
