@@ -101,7 +101,7 @@ export function FlowchartCompletion({
 
                       if (match && match.index !== undefined) {
                         const beforeRaw = displayLabel.substring(0, match.index);
-                        const after = displayLabel.substring(match.index + match[0].length);
+                        const afterRaw = displayLabel.substring(match.index + match[0].length);
 
                         // If the match is just underscores ("__"), the number may remain in `beforeRaw` (e.g. "1__").
                         // Remove the trailing question number to ensure it only appears in the placeholder.
@@ -109,6 +109,12 @@ export function FlowchartCompletion({
                           .replace(new RegExp(`\\b${step.questionNumber}\\b\\s*$`), '')
                           .replace(/\s{2,}/g, ' ')
                           .trimEnd();
+                        
+                        // Also remove leading question number patterns from after text (e.g. "1__" or "2__.")
+                        const after = afterRaw
+                          .replace(new RegExp(`^\\s*${step.questionNumber}\\s*_{1,}\\.?\\s*`), '')
+                          .replace(/^_{1,}\\.?\\s*/, '')
+                          .trimStart();
 
                         return (
                           <span className="text-muted-foreground text-sm">
