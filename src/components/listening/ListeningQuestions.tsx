@@ -50,31 +50,40 @@ const stripLeadingQuestionNumber = (text: string, questionNumber: number): strin
   return text.replace(regex, '').trim();
 };
 
-// HELPER: Robust option extractor with JSON Parsing
+// HELPER: Robust option extractor with JSON Parsing (Handles Arrays, Objects, and JSON Strings)
 const extractOptions = (raw: any): string[] => {
   if (!raw) return [];
 
-  // Direct array format
-  if (Array.isArray(raw)) return raw;
+  // Direct array of strings
+  if (Array.isArray(raw)) {
+    // Ensure all elements are strings (filter out objects/nulls)
+    return raw.filter((item): item is string => typeof item === 'string');
+  }
 
   // Handle nested object from AI/DB { options: [...] }
   if (typeof raw === 'object') {
-    if (Array.isArray(raw.options)) return raw.options;
-    // Sometimes: { options: { options: [...] } }
-    if (raw.options && typeof raw.options === 'object' && Array.isArray(raw.options.options)) {
-      return raw.options.options;
+    // Priority 1: raw.options is an array
+    if (Array.isArray(raw.options)) {
+      return raw.options.filter((item: any): item is string => typeof item === 'string');
     }
-    // Sometimes options themselves are stored as a JSON string
-    if (typeof raw.options === 'string') return extractOptions(raw.options);
+    // Priority 2: Nested { options: { options: [...] } }
+    if (raw.options && typeof raw.options === 'object' && Array.isArray(raw.options.options)) {
+      return raw.options.options.filter((item: any): item is string => typeof item === 'string');
+    }
+    // Priority 3: raw.options is a JSON string
+    if (typeof raw.options === 'string') {
+      return extractOptions(raw.options);
+    }
   }
 
-  // FIX: Handle stringified JSON (Common in Admin Presets)
+  // FIX: Handle stringified JSON (Crucial for Admin Presets stored as text)
   if (typeof raw === 'string') {
     try {
       const parsed = JSON.parse(raw);
-      return extractOptions(parsed);
+      return extractOptions(parsed); // Recurse with parsed data
     } catch (e) {
-      console.warn('Failed to parse MCMA options:', e);
+      // Not valid JSON - could be a single option string, ignore
+      console.warn('[MCMA] Failed to parse options as JSON:', e);
     }
   }
 
@@ -599,21 +608,26 @@ export function ListeningQuestions({
                 // Use whatever valid options we found
                 const mcqOptions = optionsFromGroup.length > 0 ? optionsFromGroup : optionsFromQuestion;
 
-                // 3. CALCULATE VISUAL RANGE + MAX ANSWERS (ROBUST)
-                // Prefer explicit max_answers if present (including when group options are JSON strings)
-                let maxAnswers = Number(groupOptionsObj?.max_answers);
+                // 3. CALCULATE VISUAL RANGE + MAX ANSWERS (ROBUST - FIXES "1-1" BUG)
+                // Priority 1: Explicit max_answers from group options
+                let maxAnswers = Number(groupOptionsObj?.max_answers) || 0;
 
-                // Fallback: infer from text ("Choose THREE letters")
-                if (!maxAnswers) {
-                  const inferred = inferMaxAnswersFromText(firstQ?.question_text);
-                  if (inferred) maxAnswers = inferred;
+                // Priority 2: Infer from instruction text ("Choose THREE letters")
+                if (!maxAnswers || maxAnswers < 2) {
+                  const inferred = inferMaxAnswersFromText(firstQ?.question_text) || 
+                                   inferMaxAnswersFromText(group.instruction);
+                  if (inferred && inferred >= 2) maxAnswers = inferred;
                 }
 
-                // Fallback: infer from DB range
-                if (!maxAnswers) {
+                // Priority 3: Infer from DB question range
+                if (!maxAnswers || maxAnswers < 2) {
                   const range = group.end_question - group.start_question + 1;
-                  maxAnswers = range > 1 ? range : 2; // MCMA must allow at least 2
+                  // FIX: If range is 1 (common in AI single-obj generation), FORCE it to 2 for MCMA
+                  maxAnswers = range >= 2 ? range : 2;
                 }
+
+                // SAFETY: MCMA must allow at least 2 selections
+                if (maxAnswers < 2) maxAnswers = 2;
 
                 const startQ = group.start_question;
                 const endQ = startQ + maxAnswers - 1;
