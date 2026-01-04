@@ -2297,8 +2297,115 @@ serve(async (req) => {
                   ? payload.questions
                   : [];
 
+              // -----------------------------------------------------------------
+              // Options normalization (critical for DRAG_AND_DROP_OPTIONS presets)
+              // -----------------------------------------------------------------
+              const parseArrayish = (raw: any): string[] => {
+                if (!raw) return [];
+                if (Array.isArray(raw)) return raw;
+                if (typeof raw === 'object' && Array.isArray(raw.options)) return raw.options;
+                if (typeof raw === 'string') {
+                  try {
+                    const parsed = JSON.parse(raw);
+                    return parseArrayish(parsed);
+                  } catch {
+                    return [];
+                  }
+                }
+                return [];
+              };
+
+              const norm = (s: string) => String(s ?? '').trim().toLowerCase();
+              const isLetterId = (s: string) => /^[A-Z]$/.test(String(s ?? '').trim());
+              const toLabel = (idx: number) => String.fromCharCode(65 + idx);
+
+              // Start with whatever is stored on the group, then fall back to root payload.
+              // NOTE: DRAG_AND_DROP_OPTIONS presets store options under `drag_options`.
               let groupOptions: any = g?.options ?? payload.options ?? payload.groupOptions ?? {};
-              if (
+
+              // Prefer drag_options for DRAG_AND_DROP_OPTIONS
+              if (type === 'DRAG_AND_DROP_OPTIONS') {
+                const candidate =
+                  g?.options?.drag_options ??
+                  g?.drag_options ??
+                  payload.drag_options ??
+                  payload.dragOptions ??
+                  g?.options ??
+                  payload.options ??
+                  payload.groupOptions;
+
+                let options = parseArrayish(candidate)
+                  .filter((x: any): x is string => typeof x === 'string')
+                  .map((s: string) => s.trim())
+                  .filter(Boolean);
+
+                // If options are missing, bootstrap from correct answers (text form)
+                const rawCorrectTexts = (qsRaw || [])
+                  .map((q: any) => String(q?.correct_answer ?? q?.correctAnswer ?? '').trim())
+                  .filter((a: string) => a && !isLetterId(a));
+
+                if (options.length === 0 && rawCorrectTexts.length > 0) {
+                  options = Array.from(new Set(rawCorrectTexts));
+                }
+
+                // Ensure all text correct answers exist in options
+                for (const ca of rawCorrectTexts) {
+                  if (!options.some((o) => norm(o) === norm(ca))) options.push(ca);
+                }
+
+                // Ensure there are MORE options than questions (add distractors)
+                const qCount = Math.max(0, qsRaw?.length || 0);
+                const requiredTotal = Math.max(qCount + 2, qCount + 1); // must be > qCount
+
+                const dialogueRaw = String(payload.dialogue || payload.transcript || '').replace(/<[^>]*>/g, ' ');
+                const candidates: string[] = [];
+
+                // quoted phrases
+                for (const re of [/"([^"]{3,80})"/g, /'([^']{3,80})'/g]) {
+                  let m: RegExpExecArray | null;
+                  while ((m = re.exec(dialogueRaw))) {
+                    const t = (m[1] ?? '').trim();
+                    if (t) candidates.push(t);
+                  }
+                }
+
+                // capitalized phrases (names/places)
+                {
+                  const re = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b/g;
+                  let m: RegExpExecArray | null;
+                  while ((m = re.exec(dialogueRaw))) {
+                    const t = (m[1] ?? '').trim();
+                    if (t && t.length <= 40) candidates.push(t);
+                  }
+                }
+
+                const pushIfGood = (t: string) => {
+                  const s = t.trim();
+                  if (!s) return;
+                  if (options.some((o) => norm(o) === norm(s))) return;
+                  options.push(s);
+                };
+
+                for (const c of candidates) {
+                  if (options.length >= requiredTotal) break;
+                  pushIfGood(c);
+                }
+
+                // Hard fallback if we still don't have enough
+                const genericDistractors = ['registration', 'campus', 'schedule', 'information', 'entrance', 'library'];
+                for (const gd of genericDistractors) {
+                  if (options.length >= requiredTotal) break;
+                  pushIfGood(gd);
+                }
+
+                // Normalize to ListeningQuestions expectations
+                groupOptions = {
+                  ...(typeof groupOptions === 'object' && !Array.isArray(groupOptions) ? groupOptions : {}),
+                  type,
+                  options,
+                  option_format: (g?.options?.option_format || payload.option_format || 'A') as string,
+                };
+              } else if (
                 Array.isArray(groupOptions) &&
                 [
                   'MATCHING_CORRECT_LETTER',
@@ -2331,7 +2438,7 @@ serve(async (req) => {
                 }
               }
 
-              const questions = qsRaw.map((q: any, idx: number) => {
+              let questions = qsRaw.map((q: any, idx: number) => {
                 const qType = normalizeType(q?.question_type || type);
                 return {
                   id: q?.id || crypto.randomUUID(),
@@ -2350,6 +2457,30 @@ serve(async (req) => {
                   table_data: q?.table_data ?? groupOptions?.table_data ?? null,
                 };
               });
+
+              // For drag-and-drop presets: convert text correct_answer -> letter ID (A, B, C...)
+              if (type === 'DRAG_AND_DROP_OPTIONS') {
+                const opts: string[] = Array.isArray(groupOptions?.options) ? groupOptions.options : [];
+                const normOpts = opts.map(norm);
+
+                questions = questions.map((q: any) => {
+                  const caRaw = String(q.correct_answer ?? '').trim();
+                  if (!caRaw) return q;
+                  if (isLetterId(caRaw)) return q;
+
+                  let idx = normOpts.indexOf(norm(caRaw));
+                  if (idx === -1) {
+                    // Ensure the correct answer is included as an option
+                    opts.push(caRaw);
+                    normOpts.push(norm(caRaw));
+                    idx = opts.length - 1;
+                    // keep groupOptions in sync
+                    groupOptions = { ...groupOptions, options: opts };
+                  }
+
+                  return { ...q, correct_answer: toLabel(idx) };
+                });
+              }
 
               return {
                 id: g?.id || crypto.randomUUID(),
