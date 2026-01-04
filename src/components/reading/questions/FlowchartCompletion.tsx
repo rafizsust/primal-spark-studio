@@ -5,7 +5,7 @@ import { ArrowDown, ArrowRight } from 'lucide-react';
 interface FlowchartStep {
   id: string;
   label: string;
-  questionNumber?: number; // If has a blank to fill
+  questionNumber?: number;
   isBlank?: boolean;
 }
 
@@ -31,6 +31,24 @@ export function FlowchartCompletion({
   const isVertical = direction === 'vertical';
   const ArrowIcon = isVertical ? ArrowDown : ArrowRight;
 
+  // Parse label to extract text before/after blank marker
+  const parseBlankLabel = (label: string, questionNumber: number) => {
+    // Match patterns like (3), [3], __, ___, ..., ______
+    const blankPattern = new RegExp(`\\(${questionNumber}\\)|\\[${questionNumber}\\]|_{2,}|\\.{3,}|______`);
+    const match = label.match(blankPattern);
+    
+    if (match && match.index !== undefined) {
+      return {
+        before: label.substring(0, match.index).trim(),
+        after: label.substring(match.index + match[0].length).trim(),
+        hasMarker: true,
+      };
+    }
+    
+    // No marker found - just show label with input after
+    return { before: label, after: '', hasMarker: false };
+  };
+
   return (
     <div className="space-y-3" style={{ fontSize: `${fontSize}px` }}>
       {title && (
@@ -45,6 +63,7 @@ export function FlowchartCompletion({
           const isActive = step.questionNumber === currentQuestion;
           const answer = step.questionNumber ? answers[step.questionNumber] : undefined;
           const isLast = index === steps.length - 1;
+          const showInput = step.isBlank && step.questionNumber;
 
           return (
             <div key={step.id} className={cn(
@@ -60,59 +79,31 @@ export function FlowchartCompletion({
                     : "border-border bg-card hover:border-muted-foreground/50"
                 )}
               >
-                {/* Question number badge removed - the input placeholder shows the number */}
-
-                {/* Content */}
-                {step.isBlank && step.questionNumber ? (
+                {showInput ? (
                   <div className="text-muted-foreground text-sm leading-relaxed">
                     {(() => {
-                      // Parse label to find blank marker like (3) or similar patterns
-                      const blankPattern = new RegExp(`\\(${step.questionNumber}\\)|\\[${step.questionNumber}\\]|_{2,}|\\.\\.\\.|______`);
-                      const match = step.label.match(blankPattern);
+                      const { before, after } = parseBlankLabel(step.label, step.questionNumber!);
                       
-                      if (match && match.index !== undefined) {
-                        const before = step.label.substring(0, match.index);
-                        const after = step.label.substring(match.index + match[0].length);
-                        
-                        return (
-                          <span className="inline">
-                            {before}
+                      return (
+                        <span className="inline items-baseline flex-wrap">
+                          {before && <span>{before} </span>}
+                          <span className="inline-flex items-baseline">
                             <Input
                               type="text"
                               value={answer || ''}
                               onChange={(e) => onAnswerChange(step.questionNumber!, e.target.value)}
                               placeholder={String(step.questionNumber)}
                               className={cn(
-                                "inline-block h-6 w-20 text-xs rounded-[3px] text-center placeholder:font-bold placeholder:text-foreground/70 mx-1 align-baseline",
+                                "inline-block h-7 min-w-[100px] max-w-[140px] text-sm rounded-[3px] text-center placeholder:font-bold placeholder:text-foreground/70 align-baseline",
                                 isActive
                                   ? "border-primary focus:ring-primary"
                                   : "border-border"
                               )}
                               onClick={(e) => e.stopPropagation()}
                             />
-                            {after}
                           </span>
-                        );
-                      }
-                      
-                      // Fallback: show label with input below if no marker found
-                      return (
-                        <>
-                          <span>{step.label}</span>
-                          <Input
-                            type="text"
-                            value={answer || ''}
-                            onChange={(e) => onAnswerChange(step.questionNumber!, e.target.value)}
-                            placeholder={String(step.questionNumber)}
-                            className={cn(
-                              "h-7 text-sm min-w-[100px] max-w-full rounded-[3px] text-center placeholder:font-bold placeholder:text-foreground/70 mt-2",
-                              isActive
-                                ? "border-primary focus:ring-primary"
-                                : "border-border"
-                            )}
-                            onClick={(e) => e.stopPropagation()}
-                          />
-                        </>
+                          {after && <span> {after}</span>}
+                        </span>
                       );
                     })()}
                   </div>
