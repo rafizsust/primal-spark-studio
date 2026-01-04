@@ -78,14 +78,6 @@ export function ListeningQuestions({
     return `${numbers[0]} to ${numbers[numbers.length - 1]}`;
   };
 
-  const getOptionLabel = (index: number, format: string) => {
-    if (format === '1') return String(index + 1);
-    if (format === 'i') {
-      const romanNumerals = ['i', 'ii', 'iii', 'iv', 'v', 'vi', 'vii', 'viii', 'ix', 'x', 'xi', 'xii'];
-      return romanNumerals[index] || String(index + 1);
-    }
-    return String.fromCharCode(65 + index);
-  };
 
   // Normalize listening table_data which may come as:
   // - AI format: { headers: string[], rows: Array<Array<{text?:string,isBlank?:boolean,questionNumber?:number}>> }
@@ -415,58 +407,68 @@ export function ListeningQuestions({
             )}
 
             {/* Matching Correct Letter - Group Options Display */}
-            {group.question_type === 'MATCHING_CORRECT_LETTER' && group.options?.options && group.options.options.length > 0 && (
-              <div className="mb-6">
-                <h4 className="text-sm font-semibold mb-3 text-foreground">
-                  <QuestionTextWithTools
-                    testId={testId}
-                    contentId={`${group.id}-matching-instruction`}
-                    text="Choose the correct letter:"
-                    fontSize={fontSize}
-                    renderRichText={renderRichText}
-                    isActive={false}
-                  />
-                </h4>
-              <div className="flex flex-col gap-y-2">
-                {group.options.options.map((optionText: unknown, idx: number) => {
-                    // FIX: Smart Normalizer to handle objects and prevent crashes
-                    const cleanOptionText = (text: any): string => {
-                      // 1. Null check
-                      if (text === null || text === undefined) return '';
+            {(() => {
+              // FIX: Normalize question_type (snake_case vs camelCase)
+              const qType = group.question_type || (group as any).questionType || '';
+              
+              // FIX: Normalize nested 'options' structure from AI payloads
+              const rawOptions = group.options;
+              const normalizedOptions: any[] = Array.isArray(rawOptions)
+                ? rawOptions
+                : Array.isArray((rawOptions as any)?.options)
+                  ? (rawOptions as any).options
+                  : [];
+              
+              if (qType !== 'MATCHING_CORRECT_LETTER' || normalizedOptions.length === 0) return null;
+              
+              return (
+                <div className="mb-6">
+                  <h4 className="text-sm font-semibold mb-3 text-foreground">
+                    <QuestionTextWithTools
+                      testId={testId}
+                      contentId={`${group.id}-matching-instruction`}
+                      text="Choose the correct letter:"
+                      fontSize={fontSize}
+                      renderRichText={renderRichText}
+                      isActive={false}
+                    />
+                  </h4>
+                  <div className="flex flex-col gap-y-2">
+                    {normalizedOptions.map((opt: any, idx: number) => {
+                      // AI data can be: { letter: 'A', text: 'Description' } OR just a string
+                      const label = opt?.letter || opt?.value || String.fromCharCode(65 + idx);
                       
-                      // 2. Handle Object (The Fix for [object Object])
-                      if (typeof text === 'object') {
-                        const content = text.text || text.content || text.label || text.value || text.description;
-                        if (content) return cleanOptionText(content);
-                        return '';
+                      // Extract content safely (Fixes [object Object])
+                      let content = '';
+                      if (typeof opt === 'string') {
+                        content = opt;
+                      } else if (opt && typeof opt === 'object') {
+                        content = opt.text || opt.content || opt.description || opt.label || '';
                       }
                       
-                      // 3. Handle String (Standard cleaning)
-                      return String(text).replace(/^[A-Za-z]\.?\s*/, '').trim();
-                    };
-                    
-                    const cleanedText = cleanOptionText(optionText);
-                    if (!cleanedText) return null; // Skip empty options
-                    return (
-                      <div key={idx} className="text-sm text-foreground flex items-baseline">
-                        <span className="font-bold text-primary mr-1">
-                          {getOptionLabel(idx, group.options.option_format || 'A')}.
-                        </span>
-                        <QuestionTextWithTools
-                          testId={testId}
-                          contentId={`${group.id}-option-${idx}`}
-                          text={cleanedText}
-                          fontSize={fontSize}
-                          renderRichText={renderRichText}
-                          isActive={false}
-                          as="span"
-                        />
-                      </div>
-                    );
-                  })}
+                      // Clean format (e.g., "A. Name" -> "Name")
+                      const cleanedText = String(content).replace(/^[A-Za-z]\.?\s*/, '').trim();
+                      if (!cleanedText) return null;
+                      
+                      return (
+                        <div key={idx} className="text-sm text-foreground flex items-baseline">
+                          <span className="font-bold text-primary mr-1">{label}.</span>
+                          <QuestionTextWithTools
+                            testId={testId}
+                            contentId={`${group.id}-option-${idx}`}
+                            text={cleanedText}
+                            fontSize={fontSize}
+                            renderRichText={renderRichText}
+                            isActive={false}
+                            as="span"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* Conditional rendering for Table Completion */}
             {group.question_type === 'TABLE_COMPLETION' && (groupQuestions.length > 0 || group.options?.table_data) && (groupQuestions[0]?.table_data || group.options?.table_data) ? (
