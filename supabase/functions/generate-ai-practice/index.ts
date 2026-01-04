@@ -2997,7 +2997,16 @@ ${parsed.dialogue}`;
             // Update speaker names for monologue
             speakerNames = { Speaker1: 'Narrator' };
           } else {
-            console.warn('[Monologue Rescue] Conversion returned empty/short result, using original dialogue');
+            console.warn('[Monologue Rescue] Conversion returned empty/short result, using original dialogue with cleanup');
+            // FIX: If we must use the original dialogue, STRIP THE LABELS first.
+            // This ensures the single voice doesn't say "Speaker 1" or character names aloud.
+            finalTranscript = parsed.dialogue
+              .replace(/(Speaker\s*\d+|[A-Z][a-z]+):\s*/g, '') // Remove "Speaker 1:" or "Sarah:"
+              .replace(/\(.*?\)/g, '')                         // Remove stage directions/pauses
+              .replace(/<[^>]*>/g, '')                         // Remove XML tags
+              .replace(/\s+/g, ' ')                            // Normalize spaces
+              .trim();
+            speakerNames = { Speaker1: 'Narrator' };
           }
         } catch (rescueErr) {
           console.error('[Monologue Rescue] Failed to convert, using original dialogue:', rescueErr);
