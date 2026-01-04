@@ -50,12 +50,15 @@ export function MatchingCorrectLetter({
     return String.fromCharCode(65 + index);
   };
 
-  // Replace underscore placeholders with the dropdown (no "______ [Select]" artifacts)
-  const underscorePattern = /_{2,}/;
+  // FIX: Robust Regex to catch standard underscores, dashes, or brackets
+  // This ensures 'hasBlank' becomes true, preventing the "Text _____ [Select]" artifact.
+  const underscorePattern = /([_—–-]){2,}|\[_+\]/;
   const questionText = question.question_text || '';
-  const [beforeBlank, ...afterBlankParts] = questionText.split(underscorePattern);
-  const afterBlank = afterBlankParts.join('');
-  const hasBlank = afterBlankParts.length > 0;
+  const parts = questionText.split(underscorePattern);
+  // Logic: If split found a match, parts will be > 1. 
+  const hasBlank = parts.length > 1;
+  const beforeBlank = parts[0]?.replace(/[_—–-]+$/, '').trimEnd() || ''; // Strip trailing underscores
+  const afterBlank = parts.slice(2).join('').trimStart(); // Skip the captured separator group
 
   const dropdown = (
     <Select
