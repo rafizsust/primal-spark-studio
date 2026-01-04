@@ -50,11 +50,24 @@ const stripLeadingQuestionNumber = (text: string, questionNumber: number): strin
   return text.replace(regex, '').trim();
 };
 
-// HELPER: Robust option extractor (copied from ReadingQuestions.tsx)
-// Checks nested AI format, flat DB format, and question-level format.
+// HELPER: Robust option extractor with JSON Parsing
 const extractOptions = (raw: any): string[] => {
+  if (!raw) return [];
   if (Array.isArray(raw)) return raw;
-  if (raw && typeof raw === 'object' && Array.isArray(raw.options)) return raw.options;
+  
+  // Handle nested object from AI { options: [...] }
+  if (typeof raw === 'object' && Array.isArray(raw.options)) return raw.options;
+  
+  // FIX: Handle stringified JSON (Common in Admin Presets)
+  if (typeof raw === 'string') {
+    try {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+      if (parsed && Array.isArray(parsed.options)) return parsed.options;
+    } catch (e) {
+      console.warn("Failed to parse MCMA options:", e);
+    }
+  }
   return [];
 };
 
@@ -537,16 +550,19 @@ export function ListeningQuestions({
                 // Use whatever valid options we found
                 const mcqOptions = optionsFromGroup.length > 0 ? optionsFromGroup : optionsFromQuestion;
 
-                // 3. CALCULATE VISUAL RANGE (Fixes "Question 1" -> "Questions 1-3")
-                // Fresh AI has max_answers in options; Admin Presets implied by range.
-                const maxAnswers = Number((groupOptionsRaw as any)?.max_answers) || 
-                                   (group.end_question - group.start_question + 1) || 
-                                   2;
+                // 3. CALCULATE VISUAL RANGE (FIXED)
+                let maxAnswers = Number((groupOptionsRaw as any)?.max_answers);
+                
+                // If max_answers is missing, infer from range
+                if (!maxAnswers) {
+                   const range = group.end_question - group.start_question + 1;
+                   // FIX: If range is 1 (common in AI single-obj gen), FORCE it to 2 for MCMA
+                   maxAnswers = range > 1 ? range : 2; 
+                }
 
                 const startQ = group.start_question;
-                // Force endQ to match the "Select X" count for visual correctness
                 const endQ = startQ + maxAnswers - 1; 
-                const mcqQuestionRange = maxAnswers > 1 ? `${startQ}-${endQ}` : `${startQ}`;
+                const mcqQuestionRange = `${startQ}-${endQ}`; // Always show range for MCMA
 
                 // 4. INFER FORMAT (A, B, C vs i, ii, iii)
                 const optionFormat = (groupOptionsRaw as any)?.option_format || (firstQ as any)?.option_format || 'A';
