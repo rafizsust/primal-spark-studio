@@ -1921,30 +1921,49 @@ Return ONLY valid JSON:
   ]
 }`;
     case 'MATCHING_CORRECT_LETTER':
+    case 'DRAG_AND_DROP_OPTIONS': {
+      // UNIFIED PROMPT for both question types - they are functionally identical
       // Calculate number of distractor options (2-3 more than number of questions)
-      const numDistractors = Math.min(3, Math.max(2, Math.ceil(effectiveQuestionCount * 0.4)));
-      const totalOptions = effectiveQuestionCount + numDistractors;
-      return basePrompt + `2. Create ${effectiveQuestionCount} drag-and-drop matching questions.
+      const numDistractorsDND = Math.min(3, Math.max(2, Math.ceil(effectiveQuestionCount * 0.4)));
+      const totalOptionsDND = effectiveQuestionCount + numDistractorsDND;
+      const lastLetterDND = String.fromCharCode(64 + totalOptionsDND);
+      
+      return basePrompt + `2. Create ${effectiveQuestionCount} drag-and-drop questions with a word bank.
 
-CRITICAL REQUIREMENTS:
-- Generate EXACTLY ${totalOptions} options (letters A through ${String.fromCharCode(64 + totalOptions)}) - this is MORE than the number of questions
-- Only ${effectiveQuestionCount} options will be correct answers, the rest are DISTRACTORS
-- Each option must be a plausible answer that fits the context
-- Distractors should be realistic but clearly wrong based on the dialogue
-- The "options" array MUST contain ${totalOptions} items with "letter" and "text" fields
-- Each question's correct_answer must be a single letter from the options
+CRITICAL - DRAG & DROP FORMAT WITH DISTRACTORS:
+This is a WORD BANK question type where test-takers drag options to fill blanks.
+You MUST generate MORE options than questions - the extras are DISTRACTORS.
+
+REQUIREMENTS:
+1. Generate EXACTLY ${totalOptionsDND} options in the "drag_options" array (letters A-${lastLetterDND})
+2. Only ${effectiveQuestionCount} are correct answers; ${numDistractorsDND} are PLAUSIBLE DISTRACTORS
+3. DISTRACTORS must be thematically relevant but WRONG based on the dialogue
+   - If answers are names, distractors should be other plausible names NOT mentioned
+   - If answers are dates/times, distractors should be other dates/times NOT mentioned
+   - If answers are places, distractors should be other plausible places NOT mentioned
+4. Each question_text MUST contain a blank using underscores: ________
+5. Each correct_answer MUST be a SINGLE LETTER (A, B, C, etc.)
+6. Letter mapping: A = drag_options[0], B = drag_options[1], etc.
+
+EXAMPLE: If dialogue mentions "October 12th" and "Central Park":
+- drag_options: ["October 12th", "Central Park", "November 5th", "Riverside Park"]
+- Question about date → correct_answer: "A"
+- "November 5th" and "Riverside Park" are distractors (plausible but not mentioned)
 
 Return ONLY valid JSON:
 {
-  "dialogue": "Speaker1: Each department has specific responsibilities...<break time='500ms'/> John handles all the advertising campaigns...<break time='300ms'/> Sarah manages the quarterly reports...",
-  "speaker_names": {"Speaker1": "Manager"},
-  "instruction": "Match each person to their department.",
-  "options": [{"letter": "A", "text": "Marketing"}, {"letter": "B", "text": "Finance"}, {"letter": "C", "text": "Human Resources"}, {"letter": "D", "text": "Operations"}, {"letter": "E", "text": "Sales"}],
+  "dialogue": "Speaker1: The wellness fair is on October 12th at Central Park Pavilion...<break time='500ms'/> Sarah Jenkins leads the yoga session at 10 AM...",
+  "speaker_names": {"Speaker1": "Event Coordinator"},
+  "instruction": "Complete the notes below by dragging the correct option to each blank.",
+  "drag_options": ["October 12th", "Central Park", "Sarah Jenkins", "10 AM", "November 5th", "Riverside Park", "Michael Brown", "2 PM"],
   "questions": [
-    {"question_number": 1, "question_text": "John works in", "correct_answer": "A", "explanation": "John handles advertising campaigns, which is Marketing."},
-    {"question_number": 2, "question_text": "Sarah works in", "correct_answer": "B", "explanation": "Sarah manages quarterly reports, which is Finance."}
+    {"question_number": 1, "question_text": "Event date: ________", "correct_answer": "A", "explanation": "Speaker mentions 'October 12th' as the date."},
+    {"question_number": 2, "question_text": "Location: ________ Pavilion", "correct_answer": "B", "explanation": "Speaker says 'Central Park Pavilion'."},
+    {"question_number": 3, "question_text": "Yoga instructor: ________", "correct_answer": "C", "explanation": "Sarah Jenkins leads the yoga session."},
+    {"question_number": 4, "question_text": "Yoga session time: ________", "correct_answer": "D", "explanation": "Yoga is at 10 AM."}
   ]
 }`;
+    }
 
     case 'TABLE_COMPLETION':
       return basePrompt + `2. Create a table completion task with ${effectiveQuestionCount} blanks.
@@ -2044,34 +2063,7 @@ Return ONLY valid JSON:
   ]
 }`;
 
-    case 'DRAG_AND_DROP_OPTIONS': {
-      // Ensure options > questions (2-3 distractors)
-      const numDistractors = Math.min(3, Math.max(2, Math.ceil(effectiveQuestionCount * 0.4)));
-      const totalOptions = effectiveQuestionCount + numDistractors;
-      const lastLetter = String.fromCharCode(64 + totalOptions);
-
-      return basePrompt + `2. Create ${effectiveQuestionCount} drag-and-drop questions with extra distractor options.
-
-CRITICAL REQUIREMENTS:
-- You MUST return a \"drag_options\" array with EXACTLY ${totalOptions} items.
-- The number of options MUST be greater than the number of questions.
-- Options should be short (1-4 words), realistic, and all plausible in context.
-- Include ${numDistractors} DISTRACTOR options that are plausible but incorrect.
-- Each question_text MUST contain a blank using 2+ underscores (e.g., ________).
-- Each question's correct_answer MUST be a SINGLE LETTER from A to ${lastLetter}.
-- Letter mapping rule: A corresponds to drag_options[0], B to drag_options[1], etc.
-
-Return ONLY valid JSON:
-{
-  \"dialogue\": \"Speaker1: Each department has different responsibilities...<break time='500ms'/>\",
-  \"speaker_names\": {\"Speaker1\": \"Department Head\"},
-  \"instruction\": \"Match each person to their responsibility.\",
-  \"drag_options\": [\"Marketing\", \"Finance\", \"Human Resources\", \"Operations\", \"Sales\"],
-  \"questions\": [
-    {\"question_number\": 1, \"question_text\": \"John works in ________.\", \"correct_answer\": \"A\", \"explanation\": \"John handles advertising campaigns, which is Marketing.\"}
-  ]
-}`;
-    }
+    // DRAG_AND_DROP_OPTIONS is handled above with MATCHING_CORRECT_LETTER (same prompt)
 
 
     default:
@@ -2357,27 +2349,43 @@ serve(async (req) => {
                 const qCount = Math.max(0, qsRaw?.length || 0);
                 const requiredTotal = Math.max(qCount + 2, qCount + 1); // must be > qCount
 
-                const dialogueRaw = String(payload.dialogue || payload.transcript || '').replace(/<[^>]*>/g, ' ');
-                const candidates: string[] = [];
-
-                // quoted phrases
-                for (const re of [/"([^"]{3,80})"/g, /'([^']{3,80})'/g]) {
-                  let m: RegExpExecArray | null;
-                  while ((m = re.exec(dialogueRaw))) {
-                    const t = (m[1] ?? '').trim();
-                    if (t) candidates.push(t);
+                // Generate SMART context-aware distractors based on answer types
+                // Analyze what types of answers we have to generate matching distractors
+                const answerTypes = {
+                  hasNames: false,
+                  hasDates: false,
+                  hasTimes: false,
+                  hasPlaces: false,
+                  hasNumbers: false,
+                };
+                
+                for (const ca of rawCorrectTexts) {
+                  if (/\b(january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}(?:st|nd|rd|th)?)\b/i.test(ca)) {
+                    answerTypes.hasDates = true;
+                  }
+                  if (/\b\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)\b/.test(ca) || /\b\d{1,2}\s*o'clock\b/i.test(ca)) {
+                    answerTypes.hasTimes = true;
+                  }
+                  if (/\b(park|street|road|avenue|center|centre|hall|building|room|entrance|library|museum|cafe|restaurant|hotel|pavilion)\b/i.test(ca)) {
+                    answerTypes.hasPlaces = true;
+                  }
+                  if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?$/.test(ca) && ca.length < 25) {
+                    answerTypes.hasNames = true;
+                  }
+                  if (/^\d+$/.test(ca) || /^\$?\d+(?:,\d{3})*(?:\.\d{2})?$/.test(ca)) {
+                    answerTypes.hasNumbers = true;
                   }
                 }
 
-                // capitalized phrases (names/places)
-                {
-                  const re = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b/g;
-                  let m: RegExpExecArray | null;
-                  while ((m = re.exec(dialogueRaw))) {
-                    const t = (m[1] ?? '').trim();
-                    if (t && t.length <= 40) candidates.push(t);
-                  }
-                }
+                // Context-aware distractor pools - plausible but wrong
+                const distractorPools = {
+                  names: ['Michael Brown', 'Jennifer White', 'Robert Davis', 'Amanda Wilson', 'Thomas Clark'],
+                  dates: ['March 15th', 'June 22nd', 'November 8th', 'August 3rd', 'February 14th'],
+                  times: ['9 AM', '11 AM', '2 PM', '4 PM', '6:30 PM'],
+                  places: ['Main Hall', 'Conference Room', 'Reception Area', 'West Wing', 'Garden Terrace'],
+                  numbers: ['15', '250', '1500', '45', '120'],
+                  generic: ['registration desk', 'information center', 'main office', 'front entrance', 'parking area'],
+                };
 
                 const pushIfGood = (t: string) => {
                   const s = t.trim();
@@ -2386,17 +2394,22 @@ serve(async (req) => {
                   options.push(s);
                 };
 
-                for (const c of candidates) {
-                  if (options.length >= requiredTotal) break;
-                  pushIfGood(c);
-                }
+                const addDistractors = (pool: string[]) => {
+                  for (const d of pool) {
+                    if (options.length >= requiredTotal) return;
+                    pushIfGood(d);
+                  }
+                };
 
-                // Hard fallback if we still don't have enough
-                const genericDistractors = ['registration', 'campus', 'schedule', 'information', 'entrance', 'library'];
-                for (const gd of genericDistractors) {
-                  if (options.length >= requiredTotal) break;
-                  pushIfGood(gd);
-                }
+                // Add type-appropriate distractors
+                if (answerTypes.hasNames) addDistractors(distractorPools.names);
+                if (answerTypes.hasDates) addDistractors(distractorPools.dates);
+                if (answerTypes.hasTimes) addDistractors(distractorPools.times);
+                if (answerTypes.hasPlaces) addDistractors(distractorPools.places);
+                if (answerTypes.hasNumbers) addDistractors(distractorPools.numbers);
+                
+                // Final fallback with generic but plausible options
+                addDistractors(distractorPools.generic);
 
                 // Normalize to ListeningQuestions expectations
                 groupOptions = {
@@ -3229,7 +3242,8 @@ ${parsed.dialogue}`;
         };
       } else if (questionType === 'NOTE_COMPLETION' && parsed.note_sections) {
         groupOptions = { note_sections: parsed.note_sections };
-      } else if (questionType === 'DRAG_AND_DROP_OPTIONS') {
+      } else if (questionType === 'DRAG_AND_DROP_OPTIONS' || questionType === 'MATCHING_CORRECT_LETTER') {
+        // UNIFIED handling for drag-and-drop question types
         // Robustly ensure drag-and-drop options always exist and are MORE than the number of questions.
         const isLetterId = (s: string) => /^[A-Z]$/.test((s ?? '').trim().toUpperCase());
         const norm = (s: string) => (s ?? '').trim().toLowerCase();
@@ -3243,7 +3257,12 @@ ${parsed.dialogue}`;
         // Accept multiple possible keys from model output
         let options: string[] = [];
         if (Array.isArray(parsed.drag_options)) options = parsed.drag_options;
-        else if (Array.isArray(parsed.options)) options = parsed.options;
+        else if (Array.isArray(parsed.options)) {
+          // Handle both string[] and {letter, text}[] formats
+          options = parsed.options.map((o: any) => 
+            typeof o === 'string' ? o : (o?.text ?? o?.label ?? '')
+          );
+        }
 
         options = options
           .filter((x: any): x is string => typeof x === 'string')
@@ -3265,64 +3284,62 @@ ${parsed.dialogue}`;
           if (!options.some((o: string) => norm(o) === norm(ca))) options.push(ca);
         }
 
-        // Add distractors extracted from dialogue if we still don't have enough options
-        const rawDialogue = typeof parsed.dialogue === 'string' ? parsed.dialogue : '';
-        const cleanDialogue = rawDialogue
-          .replace(/<[^>]*>/g, ' ')
-          .replace(/Speaker\s*\d+\s*:/gi, ' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-
-        const candidates: string[] = [];
-
-        // Quoted phrases often contain good option candidates
-        for (const re of [/"([^\"]{3,80})"/g, /'([^']{3,80})'/g]) {
-          let m: RegExpExecArray | null;
-          while ((m = re.exec(cleanDialogue))) {
-            const t = (m[1] ?? '').trim();
-            if (t) candidates.push(t);
+        // Generate SMART context-aware distractors based on answer types
+        // Analyze what types of answers we have to generate matching distractors
+        const answerTypes = {
+          hasNames: false,
+          hasDates: false,
+          hasTimes: false,
+          hasPlaces: false,
+          hasNumbers: false,
+        };
+        
+        for (const ca of correctTexts) {
+          if (/\b(january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}(?:st|nd|rd|th)?)\b/i.test(ca)) {
+            answerTypes.hasDates = true;
+          }
+          if (/\b\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)\b/.test(ca) || /\b\d{1,2}\s*o'clock\b/i.test(ca)) {
+            answerTypes.hasTimes = true;
+          }
+          if (/\b(park|street|road|avenue|center|centre|hall|building|room|entrance|library|museum|cafe|restaurant|hotel)\b/i.test(ca)) {
+            answerTypes.hasPlaces = true;
+          }
+          if (/^[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?$/.test(ca) && ca.length < 25) {
+            answerTypes.hasNames = true;
+          }
+          if (/^\d+$/.test(ca) || /^\$?\d+(?:,\d{3})*(?:\.\d{2})?$/.test(ca)) {
+            answerTypes.hasNumbers = true;
           }
         }
 
-        // Capitalized phrase chunks (names/places)
-        {
-          const re = /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2})\b/g;
-          let m: RegExpExecArray | null;
-          while ((m = re.exec(cleanDialogue))) {
-            const t = (m[1] ?? '').trim();
-            if (t && t.length <= 40) candidates.push(t);
-          }
-        }
-
-        // Fallback: longer single words
-        {
-          const re = /\b[A-Za-z]{5,}\b/g;
-          let m: RegExpExecArray | null;
-          while ((m = re.exec(cleanDialogue))) {
-            const t = (m[0] ?? '').trim();
-            if (t && t.length <= 24) candidates.push(t);
-          }
-        }
-
-        const pushIfGood = (t: string) => {
-          const s = t.trim();
-          if (!s) return;
-          if (s.toLowerCase() === 'speaker') return;
-          if (options.some((o: string) => norm(o) === norm(s))) return;
-          options.push(s);
+        // Context-aware distractor pools
+        const distractorPools = {
+          names: ['Michael Brown', 'Jennifer White', 'Robert Davis', 'Amanda Wilson', 'Thomas Clark'],
+          dates: ['March 15th', 'June 22nd', 'November 8th', 'August 3rd', 'February 14th'],
+          times: ['9 AM', '11 AM', '2 PM', '4 PM', '6:30 PM'],
+          places: ['Main Hall', 'Conference Room', 'Reception Area', 'West Wing', 'Garden Terrace'],
+          numbers: ['15', '250', '1500', '45', '120'],
+          generic: ['registration desk', 'information center', 'main office', 'front entrance', 'parking area'],
         };
 
-        for (const c of candidates) {
-          if (requiredTotalOptions && options.length >= requiredTotalOptions) break;
-          pushIfGood(c);
-        }
+        const addDistractor = (pool: string[]) => {
+          for (const d of pool) {
+            if (options.length >= requiredTotalOptions) return;
+            if (!options.some((o: string) => norm(o) === norm(d))) {
+              options.push(d);
+            }
+          }
+        };
 
-        // If still short, pad with generic plausible distractors
-        const generic = ['Not mentioned', 'No information', 'Not specified', 'None of these'];
-        for (const g of generic) {
-          if (requiredTotalOptions && options.length >= requiredTotalOptions) break;
-          pushIfGood(g);
-        }
+        // Add type-appropriate distractors
+        if (answerTypes.hasNames) addDistractor(distractorPools.names);
+        if (answerTypes.hasDates) addDistractor(distractorPools.dates);
+        if (answerTypes.hasTimes) addDistractor(distractorPools.times);
+        if (answerTypes.hasPlaces) addDistractor(distractorPools.places);
+        if (answerTypes.hasNumbers) addDistractor(distractorPools.numbers);
+        
+        // Final fallback with generic but plausible options
+        addDistractor(distractorPools.generic);
 
         const finalOptions = requiredTotalOptions ? options.slice(0, requiredTotalOptions) : options;
         parsed.drag_options = finalOptions;
@@ -3351,8 +3368,6 @@ ${parsed.dialogue}`;
         };
       } else if (questionType.includes('MULTIPLE_CHOICE') && parsed.questions?.[0]?.options) {
         groupOptions = { options: parsed.questions[0].options };
-      } else if (questionType === 'MATCHING_CORRECT_LETTER' && parsed.options) {
-        groupOptions = { options: parsed.options };
       }
 
       const groupId = crypto.randomUUID();
