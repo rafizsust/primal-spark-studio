@@ -97,6 +97,7 @@ interface Question {
   heading: string | null;
   options?: string[] | null;
   option_format?: string | null;
+  table_data?: any; // For TABLE_COMPLETION type
 }
 
 interface QuestionGroup {
@@ -452,8 +453,20 @@ export default function AIPracticeListeningTest() {
           groupOptions = { type: groupType, options: groupOptions, option_format: 'A' };
         }
 
+        // For TABLE_COMPLETION, ensure table_data is preserved in group options
+        if (groupType === 'TABLE_COMPLETION') {
+          const tableData = group.options?.table_data || (group as any).table_data;
+          if (tableData) {
+            groupOptions = { ...groupOptions, table_data: tableData };
+          }
+        }
+
         const groupQuestions: Question[] = group.questions.map((q) => {
           const qt = normalizeType(q.question_type) || groupType;
+          
+          // For TABLE_COMPLETION, also include table_data on the question if available
+          const questionTableData = (q as any).table_data || group.options?.table_data || (group as any).table_data;
+          
           return {
             id: q.id,
             question_number: q.question_number,
@@ -470,6 +483,8 @@ export default function AIPracticeListeningTest() {
                 ? ((q as any).options.options as string[])
                 : null,
             option_format: (q as any).option_format || groupOptions?.option_format || null,
+            // Include table_data for TABLE_COMPLETION questions
+            ...(qt === 'TABLE_COMPLETION' && questionTableData ? { table_data: questionTableData } : {}),
           };
         });
 
