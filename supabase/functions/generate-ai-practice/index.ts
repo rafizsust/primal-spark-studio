@@ -821,6 +821,18 @@ async function generateAudio(
     const ttsPrompt = `Read this clearly for a listening test. Use natural pacing and brief pauses.\n\n${text}`;
 
     for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      // FIX 2c: Smart retry text cleaning - progressively strip SSML on failures
+      let textToUse = text;
+      if (attempt === 2) {
+        textToUse = text.replace(/<(?!break)[^>]+>/g, ''); // Keep only <break> tags
+        console.log(`[TTS] Attempt ${attempt}: Stripped non-break SSML tags`);
+      } else if (attempt >= 3) {
+        textToUse = text.replace(/<[^>]*>/g, ''); // Strip ALL tags
+        console.log(`[TTS] Attempt ${attempt}: Stripped ALL SSML tags`);
+      }
+      
+      const ttsPromptClean = `Read this clearly for a listening test. Use natural pacing and brief pauses.\n\n${textToUse}`;
+      
       try {
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${currentApiKey}`,
@@ -828,7 +840,7 @@ async function generateAudio(
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              contents: [{ parts: [{ text: ttsPrompt }] }],
+              contents: [{ parts: [{ text: ttsPromptClean }] }],
               generationConfig: {
                 responseModalities: ["AUDIO"],
                 speechConfig: {
@@ -845,19 +857,34 @@ async function generateAudio(
           const errorText = await response.text();
           console.error(`TTS failed (attempt ${attempt}/${maxRetries}) voice=${voiceName}:`, errorText);
 
-          // Rotate key on 429/403 (doesn't consume a retry)
+          // FIX 2: Handle 429 QUOTA EXCEEDED - Don't give up, wait and retry
           if (response.status === 429) {
+            console.warn('Hit 429 Quota.');
+            
+            // Try to rotate keys first
             if (await rotateKeyIfPossible(false)) {
-              attempt--;
+              console.log('Key rotated successfully. Retrying immediately.');
+              attempt--; // Don't burn a retry on a successful swap
               continue;
             }
-            lastTTSError = 'All API keys have reached their rate limit for audio generation. Please wait a few minutes and try again.';
+            
+            // If rotation failed, DO NOT FAIL. Wait longer and retry with same key.
+            console.warn('No more keys to rotate (or single key mode). Backing off and retrying...');
+            await waitWithBackoff(attempt, 3000); // Wait 3-30 seconds for 429
+            lastTTSError = 'Rate limit hit - retrying with backoff...';
+            continue; // Force retry loop, don't return null
           } else if (response.status === 403) {
             if (await rotateKeyIfPossible(true)) {
               attempt--;
               continue;
             }
             lastTTSError = 'API access denied for audio generation. Please verify your Gemini API key has TTS permissions enabled.';
+          } else if (response.status === 400) {
+            // FIX 2b: Handle 400 BAD REQUEST (Bad SSML) - continue to retry with cleaner text
+            console.warn(`TTS 400 Error (Bad SSML). Will retry with cleaner text...`);
+            lastTTSError = 'Audio generation request rejected. Retrying with simpler text...';
+            // Let the loop continue - the text cleaning logic happens at attempt 2+
+            continue;
           } else {
             lastTTSError = `Audio generation failed with status ${response.status}. Please try again.`;
           }
@@ -1740,11 +1767,27 @@ function getListeningPrompt(
    - Example: "Speaker1: Welcome to the museum tour.<break time='500ms'/> Let me start by explaining the layout."
    - Avoid long silences - test takers can pause the audio if needed`;
 
+  // FIX 1: Resolve genders dynamically from actual TTS voices to prevent name/voice mismatch
+  const s1Voice = listeningConfig?.speakerConfig?.speaker1?.voiceName || 'Kore';
+  const s2Voice = listeningConfig?.speakerConfig?.speaker2?.voiceName || 'Aoede';
+  
+  const s1Gender = (VOICE_GENDER_MAP[s1Voice] || 'male').toUpperCase();
+  const s2Gender = (VOICE_GENDER_MAP[s2Voice] || (s1Gender === 'MALE' ? 'female' : 'male')).toUpperCase();
+  
+  const maleNames = 'Mark, David, John, Michael, James';
+  const femaleNames = 'Sarah, Emma, Lisa, Rachel, Kate';
+
   // Build prompt for realistic character names with SSML instructions
   const characterInstructions = useTwoSpeakers
     ? `1. Create a dialogue script between two characters that is:
    - ${wordRange} words total (approximately ${targetDurationSeconds} seconds / ${LISTENING_AUDIO_LENGTH_MINUTES} minutes when spoken)
-   - Natural and conversational with realistic names/roles (e.g., "Receptionist", "Mark", "Dr. Smith", "Sarah")
+   
+   CRITICAL GENDER & NAME RULES (VOICE-SYNCHRONIZED):
+   - Speaker1 voice is ${s1Gender}. You MUST assign Speaker1 a ${s1Gender} name (e.g., ${s1Gender === 'MALE' ? maleNames : femaleNames}).
+   - Speaker2 voice is ${s2Gender}. You MUST assign Speaker2 a ${s2Gender} name (e.g., ${s2Gender === 'MALE' ? maleNames : femaleNames}).
+   - DO NOT use self-referential phrases that contradict these genders.
+   - DO NOT assign a male name to a female voice or vice versa.
+   
    - In the output JSON dialogue field, you MUST use "Speaker1:" and "Speaker2:" prefixes for TTS processing
    - ALSO include a "speaker_names" object in your JSON that maps Speaker1/Speaker2 to their real names
    - Contains specific details (names, numbers, dates, locations)
@@ -1752,14 +1795,13 @@ function getListeningPrompt(
    
    CRITICAL OUTPUT FORMAT:
    - dialogue: Use "Speaker1:" and "Speaker2:" prefixes (required for audio generation)
-   - speaker_names: {"Speaker1": "Real Name or Role", "Speaker2": "Real Name or Role"}
-   - Example: speaker_names: {"Speaker1": "Sarah", "Speaker2": "Receptionist"}`
+   - speaker_names: {"Speaker1": "${s1Gender === 'MALE' ? 'Mark' : 'Sarah'}", "Speaker2": "${s2Gender === 'MALE' ? 'David' : 'Emma'}"}`
     : `1. Create a monologue script by a single speaker that is:
    - ${wordRange} words total (approximately ${targetDurationSeconds} seconds / ${LISTENING_AUDIO_LENGTH_MINUTES} minutes when spoken)
    - Clear and informative, like a tour guide, lecturer, or announcer
    - Use "Speaker1:" prefix for all lines (required for TTS)
    - ALSO include a "speaker_names" object: {"Speaker1": "Appropriate Role/Title"}
-   - Example: speaker_names: {"Speaker1": "Tour Guide"} or {"Speaker1": "Professor Williams"}
+   - Example: speaker_names: {"Speaker1": "Tour Guide"} or {"Speaker1": "${s1Gender === 'MALE' ? 'Professor Williams' : 'Dr. Thompson'}"}
    - Contains specific details (names, numbers, dates, locations)
    ${ssmlInstructions}`;
 
@@ -2933,11 +2975,15 @@ serve(async (req) => {
       if (!audio && parsed.dialogue && useTwoSpeakers) {
         console.log('[Monologue Rescue] Audio generation failed, converting dialogue to monologue for browser TTS...');
         try {
+          // FIX 3: Clean monologue rescue script - explicitly strip SSML tags for browser TTS
           const monologuePrompt = `Rewrite the following dialogue as a detailed monologue or narration. 
 Remove all speaker labels (e.g., "Speaker1:", "Speaker2:", names followed by colons). 
 Convert the conversation into a flowing narrative that a single narrator would read aloud.
 Keep ALL factual information, numbers, dates, names, and details that would be needed to answer test questions.
-Keep SSML break tags like <break time='500ms'/> for pacing. Never use pauses longer than 1 second.
+
+CRITICAL: REMOVE ALL SSML TAGS like <break time='500ms'/>.
+Output ONLY plain text. Do not include any XML, angle brackets, or SSML markup.
+Use punctuation (periods, commas, ellipses) for natural pauses instead.
 Return ONLY the raw monologue text, no JSON wrapper.
 
 DIALOGUE TO CONVERT:

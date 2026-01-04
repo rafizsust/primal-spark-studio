@@ -128,7 +128,14 @@ export function SimulatedAudioPlayer({
     // Cancel any existing speech
     window.speechSynthesis.cancel();
 
-    const utterance = new SpeechSynthesisUtterance(text);
+    // FIX 4: Sanitize text to remove SSML/XML tags before browser TTS speaks
+    const safeText = text
+      .replace(/<[^>]*>/g, '')      // Remove <break>, <speak>, etc.
+      .replace(/&[a-z]+;/gi, ' ')   // Remove HTML entities like &nbsp;
+      .replace(/\s+/g, ' ')         // Collapse multiple spaces
+      .trim();
+
+    const utterance = new SpeechSynthesisUtterance(safeText);
     utteranceRef.current = utterance;
 
     // Set voice
