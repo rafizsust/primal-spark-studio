@@ -446,8 +446,8 @@ export function ListeningQuestions({
                         content = opt.text || opt.content || opt.description || opt.label || '';
                       }
                       
-                      // Clean format (e.g., "A. Name" -> "Name")
-                      const cleanedText = String(content).replace(/^[A-Za-z]\.?\s*/, '').trim();
+                      // Clean format (e.g., "A. Name" -> "Name") - REQUIRE dot to avoid stripping first letter of words like "June"
+                      const cleanedText = String(content).replace(/^[A-Z0-9]+\.\s*/, '').trim();
                       if (!cleanedText) return null;
                       
                       return (
