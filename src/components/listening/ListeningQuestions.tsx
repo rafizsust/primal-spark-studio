@@ -649,12 +649,14 @@ export function ListeningQuestions({
                     try { opts = JSON.parse(opts); } catch { opts = {}; }
                   }
                   
-                  // 2. Extract Props
-                  const title = opts?.title || opts?.flowchart_title || group.group_heading || '';
+                  // 2. Extract Props - Don't use group_heading as title if it matches instruction
+                  const rawTitle = opts?.title || opts?.flowchart_title || '';
+                  // Avoid using group_heading as title since it may duplicate instruction
+                  const title = rawTitle || (group.group_heading && !/words|no more than/i.test(group.group_heading) ? group.group_heading : '');
                   const direction = opts?.direction || 'vertical';
                   
-                  // 3. Fallback Instruction (Standard IELTS Limit)
-                  const instruction = group.instruction || "Choose NO MORE THAN THREE WORDS AND/OR A NUMBER from the passage for each answer.";
+                  // 3. DO NOT pass instruction - parent already renders it above
+                  // This prevents duplicate instruction display
                   
                   // 4. Map Steps (Normalize 'label' vs 'text')
                   const rawSteps = opts?.flowchart_steps || opts?.steps || [];
@@ -668,7 +670,6 @@ export function ListeningQuestions({
                   return (
                     <FlowchartCompletion
                       title={title}
-                      instruction={instruction}
                       steps={steps}
                       direction={direction}
                       answers={answers}
