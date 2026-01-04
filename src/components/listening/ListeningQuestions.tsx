@@ -1,5 +1,5 @@
 import { cn } from '@/lib/utils';
-import { FillInBlank, ListeningTableCompletion, MatchingCorrectLetter, Maps, MapLabeling, MapLabelingTable, MultipleChoiceSingle, MultipleChoiceMultiple, DragAndDropOptions, FlowchartCompletion, NoteStyleFillInBlank } from './questions';
+import { FillInBlank, ListeningTableCompletion, MatchingCorrectLetter, Maps, MapLabeling, MapLabelingTable, MultipleChoiceSingle, MultipleChoiceMultiple, MultipleChoiceMultipleQuestions, DragAndDropOptions, FlowchartCompletion, NoteStyleFillInBlank } from './questions';
 import { QuestionTextWithTools } from '@/components/common/QuestionTextWithTools';
 import { TableData, TableEditorData } from '@/components/admin/ListeningQuestionGroupEditor'; // Import types from admin editor
 
@@ -537,43 +537,70 @@ export function ListeningQuestions({
               })()
             ) : group.question_type === 'MULTIPLE_CHOICE_MULTIPLE' ? (
               (() => {
-                // 1. RESOLVE OPTIONS (Deep Parse)
+                // IMPORTANT: In this codebase, "MULTIPLE_CHOICE_MULTIPLE" is used for two different UX patterns:
+                // 1) Shared options + multiple sub-questions (dropdown per question)  -> MultipleChoiceMultipleQuestions
+                // 2) One question where the user selects N letters (checkboxes)        -> MultipleChoiceMultiple
+                // Admin presets commonly use (1). AI listening often uses (2).
+
                 const groupOptionsRaw = group.options;
                 const firstQ = groupQuestions[0];
 
-                // Try Group Level first, then Question Level (fallback for Presets)
-                let mcqOptions = parseOpts(groupOptionsRaw);
-                if (mcqOptions.length === 0) {
-                  mcqOptions = parseOpts((firstQ as any)?.options);
-                }
+                // 1) Resolve options (deep parse + fallback to question-level)
+                let raw = parseOpts(groupOptionsRaw);
+                if (raw.length === 0) raw = parseOpts((firstQ as any)?.options);
 
-                // 2. FORCE CORRECT NUMBERING (Fix "1-1" bug)
-                // Parse config object to find max_answers
-                const configObj = typeof groupOptionsRaw === 'string' 
+                const normalizedOptions = extractOptions(raw).map((opt) => {
+                  // Normalize "A. Text" / "A) Text" -> "Text" (components generate labels themselves)
+                  const m = String(opt).match(/^\s*([A-Za-z]|\d+)\s*[\.|\)]\s*(.+)$/);
+                  return m?.[2]?.trim() || String(opt);
+                });
+
+                // 2) Determine config + ranges
+                const configObj = typeof groupOptionsRaw === 'string'
                   ? (() => { try { return JSON.parse(groupOptionsRaw); } catch { return {}; } })()
                   : groupOptionsRaw;
 
+                const optionFormat = configObj?.option_format || (firstQ as any)?.option_format || 'A';
+
+                // Heuristic: if we have >1 question in this group, render the "shared options" variant.
+                const isSharedOptionsGroup = groupQuestions.length > 1;
+
+                if (isSharedOptionsGroup) {
+                  return (
+                    <div key={group.id} className="space-y-3">
+                      <MultipleChoiceMultipleQuestions
+                        testId={testId}
+                        questions={groupQuestions}
+                        groupOptions={normalizedOptions}
+                        groupOptionFormat={optionFormat}
+                        answers={answers}
+                        onAnswerChange={onAnswerChange}
+                        fontSize={fontSize}
+                        renderRichText={renderRichText}
+                      />
+                    </div>
+                  );
+                }
+
+                // 3) Fallback: single-question "select N letters" variant
                 let maxAnswers = Number(configObj?.max_answers);
 
-                // CRITICAL: If maxAnswers is invalid/missing, force it to at least 2
-                // This ensures we never show "Question 1-1" for a multi-choice task
-                if (!maxAnswers || maxAnswers < 2) {
-                   const range = group.end_question - group.start_question + 1;
-                   maxAnswers = range > 1 ? range : 2; 
+                // If maxAnswers is missing, infer from instruction (e.g., "Choose TWO letters") else default to 2.
+                if (!maxAnswers || maxAnswers < 1) {
+                  const instr = String(group.instruction || '').toUpperCase();
+                  if (instr.includes('THREE')) maxAnswers = 3;
+                  else if (instr.includes('TWO')) maxAnswers = 2;
+                  else maxAnswers = 2;
                 }
 
                 const startQ = group.start_question;
-                const endQ = startQ + maxAnswers - 1; 
+                const endQ = startQ + Math.max(2, maxAnswers) - 1;
                 const mcqQuestionRange = `${startQ}-${endQ}`;
-
-                // Infer format (A, B, C vs i, ii, iii)
-                const optionFormat = configObj?.option_format || (firstQ as any)?.option_format || 'A';
 
                 return (
                   <div key={group.id} className="space-y-6">
                     <div className="flex items-start gap-3">
                       <div className="flex-1 space-y-3">
-                        {/* Heading: Force "Questions 1-3" Label */}
                         {firstQ?.heading && (
                           <div className="mb-2 font-bold text-foreground">
                             <QuestionTextWithTools
@@ -587,25 +614,23 @@ export function ListeningQuestions({
                           </div>
                         )}
 
-                        {/* Question Text */}
                         <QuestionTextWithTools
-                          contentId={firstQ.id}
+                          contentId={firstQ?.id || group.id}
                           testId={testId}
-                          text={firstQ.question_text}
+                          text={firstQ?.question_text || ''}
                           fontSize={fontSize}
                           renderRichText={renderRichText}
                           isActive={isActiveGroup}
                         />
 
-                        {/* Input Component */}
                         <MultipleChoiceMultiple
                           testId={testId}
                           renderRichText={renderRichText}
                           question={{
-                            id: firstQ.id,
-                            question_number: startQ, 
-                            question_text: firstQ.question_text,
-                            options: extractOptions(mcqOptions),
+                            id: firstQ?.id || group.id,
+                            question_number: startQ,
+                            question_text: firstQ?.question_text || '',
+                            options: normalizedOptions,
                             option_format: optionFormat,
                           }}
                           answer={answers[startQ]}
