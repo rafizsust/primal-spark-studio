@@ -85,6 +85,71 @@ export function useAIGenerationWithFallback() {
     const signal = abortControllerRef.current.signal;
 
     setIsGenerating(true);
+    setProgress(5);
+
+    // OPTIMIZATION: Check database cache first (saves Edge Function quotas)
+    try {
+      console.log('Checking DB cache for existing test...');
+      const { data: cachedTests, error: cacheError } = await supabase
+        .from('generated_test_audio')
+        .select('*')
+        .eq('module', options.module)
+        .eq('is_published', true)
+        .eq('status', 'ready')
+        .limit(10);
+
+      if (!cacheError && cachedTests && cachedTests.length > 0) {
+        // Filter by topic if specified
+        let matchingTests = cachedTests;
+        if (options.topicPreference) {
+          const topicMatches = cachedTests.filter(t => 
+            t.topic.toLowerCase().includes(options.topicPreference!.toLowerCase())
+          );
+          if (topicMatches.length > 0) matchingTests = topicMatches;
+        }
+
+        // Filter by difficulty if possible
+        const difficultyMatches = matchingTests.filter(t => t.difficulty === options.difficulty);
+        if (difficultyMatches.length > 0) matchingTests = difficultyMatches;
+
+        // Filter by question type if possible
+        if (options.questionType) {
+          const typeMatches = matchingTests.filter(t => t.question_type === options.questionType);
+          if (typeMatches.length > 0) matchingTests = typeMatches;
+        }
+
+        // Pick a random matching test
+        if (matchingTests.length > 0) {
+          const randomTest = matchingTests[Math.floor(Math.random() * matchingTests.length)];
+          const payload = randomTest.content_payload as Record<string, unknown>;
+          
+          // Validate the cached payload
+          const validation = validateTestPayload(payload, options.module);
+          if (validation.valid) {
+            console.log('Cache hit! Using pre-generated test:', randomTest.id);
+            setProgress(100);
+            setIsGenerating(false);
+            
+            return {
+              success: true,
+              data: {
+                ...payload,
+                testId: `cached-${randomTest.id}-${Date.now()}`,
+                presetId: randomTest.id,
+                topic: randomTest.topic,
+                audioUrl: randomTest.audio_url,
+                isCached: true,
+              },
+              usedFallback: false,
+            };
+          }
+        }
+      }
+    } catch (cacheErr) {
+      // DB check failed, proceed with fresh generation
+      console.log('DB cache check failed, proceeding with generation:', cacheErr);
+    }
+
     setProgress(10);
 
     // Retry generation up to 2 times before falling back

@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
+import { uploadToR2 } from "../_shared/r2Client.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,6 +32,16 @@ async function decryptApiKey(encryptedValue: string, encryptionKey: string): Pro
 
   const decryptedData = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, cryptoKey, encryptedData);
   return decoder.decode(decryptedData);
+}
+
+// Generate a hash for deduplication
+async function hashText(text: string): Promise<string> {
+  const data = new TextEncoder().encode(text);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hashBuffer))
+    .slice(0, 8) // Use first 8 bytes for shorter hash
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 async function generateTtsPcmBase64({
@@ -74,6 +85,46 @@ async function generateTtsPcmBase64({
   if (!audioData) throw new Error("No audio returned from Gemini TTS");
 
   return audioData;
+}
+
+// Convert PCM base64 to WAV format
+function pcmToWavBuffer(pcmBase64: string, sampleRate: number): Uint8Array {
+  const pcmBytes = Uint8Array.from(atob(pcmBase64), (c) => c.charCodeAt(0));
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataSize = pcmBytes.length;
+  const headerSize = 44;
+  const totalSize = headerSize + dataSize;
+
+  const buffer = new ArrayBuffer(totalSize);
+  const view = new DataView(buffer);
+
+  // RIFF header
+  view.setUint32(0, 0x52494646, false); // "RIFF"
+  view.setUint32(4, totalSize - 8, true);
+  view.setUint32(8, 0x57415645, false); // "WAVE"
+
+  // fmt chunk
+  view.setUint32(12, 0x666d7420, false); // "fmt "
+  view.setUint32(16, 16, true); // chunk size
+  view.setUint16(20, 1, true); // PCM format
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+
+  // data chunk
+  view.setUint32(36, 0x64617461, false); // "data"
+  view.setUint32(40, dataSize, true);
+
+  // Copy PCM data
+  const wavBytes = new Uint8Array(buffer);
+  wavBytes.set(pcmBytes, headerSize);
+
+  return wavBytes;
 }
 
 serve(async (req) => {
@@ -136,12 +187,42 @@ serve(async (req) => {
     const resolvedVoice = (voiceName || "Kore").trim();
     console.log("generate-gemini-tts: user=", user.id, "items=", items.length, "voice=", resolvedVoice);
 
-    const clips: Array<{ key: string; text: string; audioBase64: string; sampleRate: number }> = [];
+    const clips: Array<{ key: string; text: string; url?: string; audioBase64?: string; sampleRate: number }> = [];
 
     for (const item of items) {
       if (!item?.key || !item?.text) continue;
+      
       const audioBase64 = await generateTtsPcmBase64({ apiKey: geminiApiKey, text: item.text, voiceName: resolvedVoice });
-      clips.push({ key: item.key, text: item.text, audioBase64, sampleRate: 24000 });
+      const sampleRate = 24000;
+
+      // OPTIMIZATION: Try to upload to R2 for bandwidth savings
+      try {
+        const textHash = await hashText(item.text + resolvedVoice);
+        const fileName = `tts/${textHash}.wav`;
+        
+        // Convert PCM to WAV for better compatibility
+        const wavBuffer = pcmToWavBuffer(audioBase64, sampleRate);
+        
+        const uploadResult = await uploadToR2(fileName, wavBuffer, "audio/wav");
+        
+        if (uploadResult.success && uploadResult.url) {
+          console.log("TTS audio uploaded to R2:", uploadResult.url);
+          clips.push({ 
+            key: item.key, 
+            text: item.text, 
+            url: uploadResult.url, 
+            sampleRate 
+          });
+          continue;
+        } else {
+          console.warn("R2 upload failed, falling back to base64:", uploadResult.error);
+        }
+      } catch (r2Error) {
+        console.warn("R2 upload error, falling back to base64:", r2Error);
+      }
+
+      // Fallback: return base64 if R2 upload fails
+      clips.push({ key: item.key, text: item.text, audioBase64, sampleRate });
     }
 
     return new Response(JSON.stringify({ success: true, clips }), {
