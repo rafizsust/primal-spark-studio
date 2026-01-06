@@ -1561,8 +1561,12 @@ async function generateSpeakingAudio(
   return Object.keys(audioUrls).length > 0 ? audioUrls : null;
 }
 
+// Create WAV from PCM data (mono, 16-bit, 24kHz - optimized for speech)
+// Note: Gemini TTS returns PCM at 24kHz mono which is already optimal for spoken word.
+// WAV format is used for maximum browser compatibility.
+// For production at scale, consider CDN transcoding to MP3/Opus.
 function createWavFromPcm(pcmData: Uint8Array, sampleRate: number): Uint8Array {
-  const numChannels = 1;
+  const numChannels = 1; // Mono - optimal for spoken word (half the size of stereo)
   const bitsPerSample = 16;
   const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
   const blockAlign = numChannels * (bitsPerSample / 8);

@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Progress } from '@/components/ui/progress';
-import { UploadCloud, Loader2, Music } from 'lucide-react';
+import { UploadCloud, Loader2, Music, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadToR2 } from '@/lib/r2Upload';
+import { compressAudio, formatFileSize, estimateCompressedSize } from '@/utils/audioCompressor';
 
 interface ListeningAudioUploaderProps {
   testId: string;
@@ -22,6 +23,8 @@ export function ListeningAudioUploader({
 }: ListeningAudioUploaderProps) {
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
+  const [compressing, setCompressing] = useState(false);
+  const [compressionProgress, setCompressionProgress] = useState(0);
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -46,10 +49,27 @@ export function ListeningAudioUploader({
 
     setUploading(true);
     setProgress(0);
+    setCompressing(true);
+    setCompressionProgress(0);
 
     try {
+      // Step 1: Compress the audio file
+      toast.info('Compressing audio for optimal storage...');
+      const originalSize = file.size;
+      
+      const compressedFile = await compressAudio(file, (p) => {
+        setCompressionProgress(p);
+      });
+      
+      const compressedSize = compressedFile.size;
+      const savings = Math.round((1 - compressedSize / originalSize) * 100);
+      
+      setCompressing(false);
+      toast.success(`Compressed: ${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)} (${savings}% smaller)`);
+
+      // Step 2: Upload the compressed file
       const result = await uploadToR2({
-        file,
+        file: compressedFile,
         folder: `listening-audios/${testId}`,
         onProgress: setProgress,
       });
@@ -69,7 +89,9 @@ export function ListeningAudioUploader({
       toast.error(`Upload failed: ${error.message}`);
     } finally {
       setUploading(false);
+      setCompressing(false);
       setProgress(0);
+      setCompressionProgress(0);
     }
   };
 
@@ -101,24 +123,38 @@ export function ListeningAudioUploader({
             accept="audio/*"
             onChange={handleFileChange}
             ref={fileInputRef}
-            disabled={uploading}
+            disabled={uploading || compressing}
           />
           {file && (
-            <Button onClick={handleUpload} disabled={uploading}>
-              {uploading ? (
-                <>
-                  <Loader2 size={18} className="mr-2 animate-spin" />
-                  Uploading ({progress}%)
-                </>
-              ) : (
-                <>
-                  <UploadCloud size={18} className="mr-2" />
-                  Upload Audio
-                </>
-              )}
-            </Button>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Zap className="h-4 w-4" />
+                <span>
+                  Original: {formatFileSize(file.size)} → Est. compressed: {formatFileSize(estimateCompressedSize(file.size))}
+                </span>
+              </div>
+              <Button onClick={handleUpload} disabled={uploading || compressing}>
+                {compressing ? (
+                  <>
+                    <Loader2 size={18} className="mr-2 animate-spin" />
+                    Compressing ({compressionProgress}%)
+                  </>
+                ) : uploading ? (
+                  <>
+                    <Loader2 size={18} className="mr-2 animate-spin" />
+                    Uploading ({progress}%)
+                  </>
+                ) : (
+                  <>
+                    <UploadCloud size={18} className="mr-2" />
+                    Compress & Upload Audio
+                  </>
+                )}
+              </Button>
+            </div>
           )}
-          {uploading && <Progress value={progress} className="w-full" />}
+          {compressing && <Progress value={compressionProgress} className="w-full" />}
+          {uploading && !compressing && <Progress value={progress} className="w-full" />}
         </div>
       )}
     </div>

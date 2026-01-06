@@ -87,10 +87,12 @@ async function generateTtsPcmBase64({
   return audioData;
 }
 
-// Convert PCM base64 to WAV format
+// Convert PCM base64 to WAV format (mono, 16-bit, 24kHz - optimized for speech)
+// Note: WAV is used for maximum compatibility. For production at scale,
+// consider using a CDN with on-the-fly transcoding or client-side compression.
 function pcmToWavBuffer(pcmBase64: string, sampleRate: number): Uint8Array {
   const pcmBytes = Uint8Array.from(atob(pcmBase64), (c) => c.charCodeAt(0));
-  const numChannels = 1;
+  const numChannels = 1; // Mono - optimal for spoken word
   const bitsPerSample = 16;
   const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
   const blockAlign = numChannels * (bitsPerSample / 8);
