@@ -27,7 +27,7 @@ serve(async (req) => {
       userId = user?.id || null;
     }
 
-    const { module, topic, excludeTestIds, preferredAccent } = await req.json();
+    const { module, topic, difficulty, questionType, excludeTestIds, preferredAccent } = await req.json();
 
     if (!module) {
       return new Response(JSON.stringify({ error: "Module is required" }), {
@@ -36,17 +36,30 @@ serve(async (req) => {
       });
     }
 
+    console.log(`[get-smart-test] Request: module=${module}, topic=${topic}, difficulty=${difficulty}, questionType=${questionType}`);
+
     // If no topic is specified and user is logged in, use Smart-Cycle algorithm to pick topic
     let effectiveTopic = topic;
     
     if (!effectiveTopic && userId) {
       // Get all distinct topics from published tests for this module
-      const { data: topicData } = await supabase
+      // Also filter by difficulty and questionType if provided to get relevant topics
+      let topicQuery = supabase
         .from("generated_test_audio")
         .select("topic")
         .eq("module", module)
         .eq("is_published", true)
         .eq("status", "ready");
+
+      // Apply filters when determining available topics
+      if (difficulty) {
+        topicQuery = topicQuery.eq("difficulty", difficulty);
+      }
+      if (questionType) {
+        topicQuery = topicQuery.eq("question_type", questionType);
+      }
+
+      const { data: topicData } = await topicQuery;
 
       if (topicData && topicData.length > 0) {
         // Get unique topics, sorted for consistent ordering
@@ -87,9 +100,22 @@ serve(async (req) => {
       .eq("is_published", true)
       .eq("status", "ready");
 
+    // CRITICAL: Filter by difficulty if provided
+    if (difficulty) {
+      query = query.eq("difficulty", difficulty);
+      console.log(`[get-smart-test] Filtering by difficulty: ${difficulty}`);
+    }
+
+    // CRITICAL: Filter by questionType if provided
+    if (questionType) {
+      query = query.eq("question_type", questionType);
+      console.log(`[get-smart-test] Filtering by question_type: ${questionType}`);
+    }
+
     // Filter by topic if provided (or determined by Smart-Cycle)
     if (effectiveTopic) {
       query = query.eq("topic", effectiveTopic);
+      console.log(`[get-smart-test] Filtering by topic: ${effectiveTopic}`);
     }
 
     // Get all matching tests

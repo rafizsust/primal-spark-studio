@@ -11,6 +11,8 @@ interface SmartTestSelection {
 interface UseSmartTestSelectionOptions {
   module: "listening" | "speaking" | "reading" | "writing";
   topic?: string;
+  difficulty?: string;
+  questionType?: string;
   excludeTestIds?: string[];
   preferredAccent?: string;
   autoFetch?: boolean;
@@ -19,6 +21,8 @@ interface UseSmartTestSelectionOptions {
 export function useSmartTestSelection({
   module,
   topic,
+  difficulty,
+  questionType,
   excludeTestIds,
   preferredAccent,
   autoFetch = true,
@@ -45,6 +49,8 @@ export function useSmartTestSelection({
           body: JSON.stringify({
             module,
             topic,
+            difficulty,
+            questionType,
             excludeTestIds,
             preferredAccent,
           }),
@@ -73,7 +79,7 @@ export function useSmartTestSelection({
     } finally {
       setLoading(false);
     }
-  }, [module, topic, excludeTestIds, preferredAccent]);
+  }, [module, topic, difficulty, questionType, excludeTestIds, preferredAccent]);
 
   useEffect(() => {
     if (autoFetch) {
