@@ -190,14 +190,15 @@ serve(async (req) => {
     for (const key of audioKeys) {
       try {
         const value = audioData[key];
-        const base64 = extractBase64(value);
+        const { mimeType, base64 } = parseDataUrl(value);
         // Skip tiny payloads
         if (!base64 || base64.length < 1000) continue;
 
         const audioBytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-        const r2Key = `speaking-audios/ai-speaking/${user.id}/${testId}/${key}.webm`;
+        const ext = mimeType === 'audio/mpeg' ? 'mp3' : 'webm';
+        const r2Key = `speaking-audios/ai-speaking/${user.id}/${testId}/${key}.${ext}`;
 
-        const result = await uploadToR2(r2Key, audioBytes, 'audio/webm');
+        const result = await uploadToR2(r2Key, audioBytes, mimeType);
         if (result.success && result.url) {
           audioUrls[key] = result.url;
           console.log(`[evaluate-ai-speaking] Uploaded audio to R2: ${r2Key}`);
@@ -396,11 +397,23 @@ serve(async (req) => {
   }
 });
 
-function extractBase64(value: string): string {
-  if (!value) return '';
-  const commaIdx = value.indexOf(',');
-  if (commaIdx >= 0) return value.slice(commaIdx + 1);
-  return value;
+function parseDataUrl(value: string): { mimeType: string; base64: string } {
+  if (!value) return { mimeType: 'audio/webm', base64: '' };
+
+  // data:[mime];base64,[payload]
+  if (value.startsWith('data:')) {
+    const commaIdx = value.indexOf(',');
+    const header = commaIdx >= 0 ? value.slice(5, commaIdx) : value.slice(5);
+    const base64 = commaIdx >= 0 ? value.slice(commaIdx + 1) : '';
+
+    const semiIdx = header.indexOf(';');
+    const mimeType = (semiIdx >= 0 ? header.slice(0, semiIdx) : header).trim() || 'audio/webm';
+
+    return { mimeType, base64 };
+  }
+
+  // Raw base64 (legacy)
+  return { mimeType: 'audio/webm', base64: value };
 }
 
 function parseJsonFromResponse(responseText: string): any {
@@ -472,10 +485,10 @@ function buildGeminiContents(input: {
       });
 
       const rawAudio = audioData[audioKey];
-      const base64 = extractBase64(rawAudio || '');
+      const { mimeType, base64 } = parseDataUrl(rawAudio || '');
 
       if (base64 && base64.length > 1000) {
-        contents.push({ parts: [{ inlineData: { mimeType: 'audio/webm', data: base64 } }] });
+        contents.push({ parts: [{ inlineData: { mimeType, data: base64 } }] });
         contents.push({
           parts: [{
             text: `Transcribe the candidate's speech for this audio and store it in the JSON field "transcripts" under the key "${audioKey}". If there is no speech, write "No speech detected" for this key.`,
