@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 import { uploadToR2 } from "../_shared/r2Client.ts";
-import { createMuLawWav } from "../_shared/muLawCompressor.ts";
+import { createPcmWav } from "../_shared/pcmToWav.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -203,13 +203,11 @@ serve(async (req) => {
     const systemKeys = await getSystemGeminiKeys(serviceClient);
 
     const resolvedVoice = (voiceName || "Kore").trim();
-    // Default to "tts/" folder for user audio (ephemeral), allow override for admin audio
+    // Default to "tts/" folder for user audio, allow override for admin audio
     const folder = (directory || "tts").replace(/\/$/, "");
 
-    // IMPORTANT: Gemini returns PCM at ~24000Hz 16-bit. We downsample to 8000Hz (speech-safe)
-    // before Mu-Law encoding to materially reduce storage cost.
-    const inputSampleRate = 24000;
-    const outputSampleRate = 8000;
+    // Gemini returns PCM at 24000Hz 16-bit - we preserve full quality (no Mu-Law)
+    const sampleRate = 24000;
 
     console.log(
       "generate-gemini-tts:",
@@ -217,7 +215,7 @@ serve(async (req) => {
       "items=", items.length,
       "voice=", resolvedVoice,
       "folder=", folder,
-      "sr(in/out)=", `${inputSampleRate}/${outputSampleRate}`
+      "sampleRate=", sampleRate
     );
 
     const clips: Array<{ key: string; text: string; url?: string; audioBase64?: string; sampleRate: number }> = [];
@@ -232,13 +230,13 @@ serve(async (req) => {
         voiceName: resolvedVoice,
       });
 
-      // OPTIMIZATION: Upload Mu-Law WAV to R2 (CPU-friendly). We additionally downsample to 8kHz for real storage savings.
+      // Upload standard 16-bit PCM WAV to R2 (full quality, no Mu-Law degradation)
       try {
         const textHash = await hashText(item.text + resolvedVoice);
         const fileName = `${folder}/${textHash}.wav`;
 
         const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-        const wavBuffer = createMuLawWav(pcmBytes, inputSampleRate, outputSampleRate);
+        const wavBuffer = createPcmWav(pcmBytes, sampleRate);
 
         console.log("generate-gemini-tts: wav bytes=", wavBuffer.length, "key=", fileName);
 
@@ -249,7 +247,7 @@ serve(async (req) => {
             key: item.key,
             text: item.text,
             url: uploadResult.url,
-            sampleRate: outputSampleRate,
+            sampleRate,
           });
           continue;
         } else {
@@ -260,7 +258,7 @@ serve(async (req) => {
       }
 
       // Fallback: return base64 if R2 upload fails
-      clips.push({ key: item.key, text: item.text, audioBase64, sampleRate: inputSampleRate });
+      clips.push({ key: item.key, text: item.text, audioBase64, sampleRate });
     }
 
     return new Response(JSON.stringify({ success: true, clips }), {
