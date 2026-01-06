@@ -1424,14 +1424,15 @@ async function generateAndUploadAudio(
       })
     : await generateGeminiTtsDirect(supabaseServiceClient, cleanText, speaker1Voice);
 
-  // Convert base64 PCM to WAV and upload to R2
-  // Note: MP3 compression is too CPU-intensive for edge functions, so we upload WAV directly
-  const { createWavFromPcm } = await import("../_shared/audioCompressor.ts");
+  // Convert base64 PCM to Mu-Law WAV and upload to R2
+  // Mu-Law: 50% size reduction, fast encoding (no CPU timeout issues)
+  const { createMuLawWav } = await import("../_shared/muLawCompressor.ts");
   const { uploadToR2 } = await import("../_shared/r2Client.ts");
 
   const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-  const wavBytes = createWavFromPcm(pcmBytes, sampleRate);
-  const key = `generated-tests/${jobId}/${index}.wav`;
+  const wavBytes = createMuLawWav(pcmBytes, sampleRate);
+  // Admin audio goes to "presets/" folder for permanent storage
+  const key = `presets/${jobId}/${index}.wav`;
 
   const uploadResult = await uploadToR2(key, wavBytes, "audio/wav");
 
@@ -1520,8 +1521,8 @@ async function generateSpeakingAudio(
 
   console.log(`[Job ${jobId}] Generating audio for ${ttsItems.length} speaking items using PARALLEL Gemini TTS`);
 
-  // Note: MP3 compression is too CPU-intensive for edge functions, so we upload WAV directly
-  const { createWavFromPcm } = await import("../_shared/audioCompressor.ts");
+  // Mu-Law WAV: 50% size reduction, fast encoding (no CPU timeout)
+  const { createMuLawWav } = await import("../_shared/muLawCompressor.ts");
   const { uploadToR2 } = await import("../_shared/r2Client.ts");
 
   // Process TTS items in parallel with concurrency limit (use all available API keys efficiently)
@@ -1538,8 +1539,9 @@ async function generateSpeakingAudio(
         );
 
         const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-        const wavBytes = createWavFromPcm(pcmBytes, sampleRate);
-        const key = `speaking-tests/${jobId}/${index}/${item.key}.wav`;
+        const wavBytes = createMuLawWav(pcmBytes, sampleRate);
+        // Admin speaking audio goes to "presets/" folder for permanent storage
+        const key = `presets/speaking/${jobId}/${index}/${item.key}.wav`;
 
         const uploadResult = await uploadToR2(key, wavBytes, "audio/wav");
         if (uploadResult.success && uploadResult.url) {
