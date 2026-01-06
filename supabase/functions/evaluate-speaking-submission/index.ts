@@ -7,6 +7,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-gemini-api-key',
 };
 
+function parseDataUrl(value: string): { mimeType: string; base64: string } {
+  if (!value) return { mimeType: 'audio/webm', base64: '' };
+
+  if (value.startsWith('data:')) {
+    const commaIdx = value.indexOf(',');
+    const header = commaIdx >= 0 ? value.slice(5, commaIdx) : value.slice(5);
+    const base64 = commaIdx >= 0 ? value.slice(commaIdx + 1) : '';
+
+    const semiIdx = header.indexOf(';');
+    const mimeType = (semiIdx >= 0 ? header.slice(0, semiIdx) : header).trim() || 'audio/webm';
+
+    return { mimeType, base64 };
+  }
+
+  return { mimeType: 'audio/webm', base64: value };
+}
+
 // ============================================================================
 // CREDIT SYSTEM - Cost Map and Daily Limits
 // ============================================================================
@@ -325,14 +342,14 @@ serve(async (req) => {
         if (part2Question) {
           const audioKey = `part${group.part_number}-q${part2Question.id}`;
           console.log(`Edge Function: Checking audio for ${audioKey}. Exists in receivedAudioKeys: ${receivedAudioKeys.includes(audioKey)}. Value type: ${typeof audioData[audioKey]}. Value length: ${audioData[audioKey]?.length}`); // NEW LOG
-          if (receivedAudioKeys.includes(audioKey) && audioData[audioKey]) {
-            const audioBase64 = audioData[audioKey].split(',')[1];
-            // Validate audio has actual content (not just empty recording)
-            if (audioBase64 && audioBase64.length > 1000) { // Minimum ~750 bytes of actual audio
-              contents.push({ parts: [{ text: `Your Audio Response for Part 2 (Topic: "${part2Question.question_text}"):\n` }] });
-              contents.push({ parts: [{ inlineData: { mimeType: 'audio/webm', data: audioBase64 } }] });
-              contents.push({ parts: [{ text: `Please provide a transcript for the above audio for Part 2, using the key "${audioKey}" in the "transcripts" object of the final JSON output. If the audio is silent or contains no speech, indicate "No speech detected" and give a band score of 0 for that part.` }] });
-            } else {
+           if (receivedAudioKeys.includes(audioKey) && audioData[audioKey]) {
+             const { mimeType, base64: audioBase64 } = parseDataUrl(audioData[audioKey]);
+             // Validate audio has actual content (not just empty recording)
+             if (audioBase64 && audioBase64.length > 1000) { // Minimum ~750 bytes of actual audio
+               contents.push({ parts: [{ text: `Your Audio Response for Part 2 (Topic: "${part2Question.question_text}"):\n` }] });
+               contents.push({ parts: [{ inlineData: { mimeType, data: audioBase64 } }] });
+               contents.push({ parts: [{ text: `Please provide a transcript for the above audio for Part 2, using the key "${audioKey}" in the "transcripts" object of the final JSON output. If the audio is silent or contains no speech, indicate "No speech detected" and give a band score of 0 for that part.` }] });
+             } else {
               contents.push({ parts: [{ text: `You provided an empty or silent recording for Part 2. Score this as 0.\n` }] });
             }
           } else {
@@ -344,14 +361,14 @@ serve(async (req) => {
           contents.push({ parts: [{ text: `\nQuestion ${question.question_number}: "${question.question_text}"\n` }] });
           const audioKey = `part${group.part_number}-q${question.id}`;
           console.log(`Edge Function: Checking audio for ${audioKey}. Exists in receivedAudioKeys: ${receivedAudioKeys.includes(audioKey)}. Value type: ${typeof audioData[audioKey]}. Value length: ${audioData[audioKey]?.length}`);
-          if (receivedAudioKeys.includes(audioKey) && audioData[audioKey]) {
-            const audioBase64 = audioData[audioKey].split(',')[1];
-            // Validate audio has actual content (not just empty recording)
-            if (audioBase64 && audioBase64.length > 1000) { // Minimum ~750 bytes of actual audio
-              contents.push({ parts: [{ text: `Your Audio Response for Question ${question.question_number}:\n` }] });
-              contents.push({ parts: [{ inlineData: { mimeType: 'audio/webm', data: audioBase64 } }] });
-              contents.push({ parts: [{ text: `Please provide a transcript for the above audio for Question ${question.question_number}, using the key "${audioKey}" in the "transcripts" object of the final JSON output. If the audio is silent or contains no speech, indicate "No speech detected" and give a band score of 0 for that question.` }] });
-            } else {
+           if (receivedAudioKeys.includes(audioKey) && audioData[audioKey]) {
+             const { mimeType, base64: audioBase64 } = parseDataUrl(audioData[audioKey]);
+             // Validate audio has actual content (not just empty recording)
+             if (audioBase64 && audioBase64.length > 1000) { // Minimum ~750 bytes of actual audio
+               contents.push({ parts: [{ text: `Your Audio Response for Question ${question.question_number}:\n` }] });
+               contents.push({ parts: [{ inlineData: { mimeType, data: audioBase64 } }] });
+               contents.push({ parts: [{ text: `Please provide a transcript for the above audio for Question ${question.question_number}, using the key "${audioKey}" in the "transcripts" object of the final JSON output. If the audio is silent or contains no speech, indicate "No speech detected" and give a band score of 0 for that question.` }] });
+             } else {
               contents.push({ parts: [{ text: `You provided an empty or silent recording for Question ${question.question_number}. Score this as 0.\n` }] });
             }
           } else {

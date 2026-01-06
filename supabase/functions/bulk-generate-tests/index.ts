@@ -1424,16 +1424,16 @@ async function generateAndUploadAudio(
       })
     : await generateGeminiTtsDirect(supabaseServiceClient, cleanText, speaker1Voice);
 
-  // Convert base64 PCM to standard 16-bit WAV (full quality, no Mu-Law)
-  const { createPcmWav } = await import("../_shared/pcmToWav.ts");
+  // Compress PCM to MP3 for 80-90% size reduction (consistent with AI Practice)
+  const { compressPcmToMp3 } = await import("../_shared/audioCompressor.ts");
   const { uploadToR2 } = await import("../_shared/r2Client.ts");
 
   const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-  const wavBytes = createPcmWav(pcmBytes, sampleRate);
+  const mp3Bytes = compressPcmToMp3(pcmBytes, sampleRate);
   // Admin audio goes to "presets/" folder for permanent storage
-  const key = `presets/${jobId}/${index}.wav`;
+  const key = `presets/${jobId}/${index}.mp3`;
 
-  const uploadResult = await uploadToR2(key, wavBytes, "audio/wav");
+  const uploadResult = await uploadToR2(key, mp3Bytes, "audio/mpeg");
 
   if (!uploadResult.success || !uploadResult.url) {
     throw new Error(uploadResult.error || "R2 upload failed");
@@ -1520,8 +1520,8 @@ async function generateSpeakingAudio(
 
   console.log(`[Job ${jobId}] Generating audio for ${ttsItems.length} speaking items using PARALLEL Gemini TTS`);
 
-  // Standard 16-bit PCM WAV (full quality, no Mu-Law degradation)
-  const { createPcmWav } = await import("../_shared/pcmToWav.ts");
+  // Compress PCM to MP3 for 80-90% size reduction (consistent with AI Practice)
+  const { compressPcmToMp3 } = await import("../_shared/audioCompressor.ts");
   const { uploadToR2 } = await import("../_shared/r2Client.ts");
 
   // Process TTS items in parallel with concurrency limit (use all available API keys efficiently)
@@ -1538,11 +1538,11 @@ async function generateSpeakingAudio(
         );
 
         const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-        const wavBytes = createPcmWav(pcmBytes, sampleRate);
+        const mp3Bytes = compressPcmToMp3(pcmBytes, sampleRate);
         // Admin speaking audio goes to "presets/" folder for permanent storage
-        const key = `presets/speaking/${jobId}/${index}/${item.key}.wav`;
+        const key = `presets/speaking/${jobId}/${index}/${item.key}.mp3`;
 
-        const uploadResult = await uploadToR2(key, wavBytes, "audio/wav");
+        const uploadResult = await uploadToR2(key, mp3Bytes, "audio/mpeg");
         if (uploadResult.success && uploadResult.url) {
           return { key: item.key, url: uploadResult.url };
         }

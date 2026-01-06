@@ -17,6 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { MicrophoneTest } from '@/components/speaking/MicrophoneTest';
 import { AILoadingScreen } from '@/components/common/AILoadingScreen';
 import { useFullscreenTest } from '@/hooks/useFullscreenTest';
+import { compressAudio } from '@/utils/audioCompressor';
 
 
 type SpeakingTest = Tables<'speaking_tests'>;
@@ -364,9 +365,19 @@ export default function SpeakingTest() {
       if (insertError) throw insertError;
 
       // Convert all recorded audio blobs to Base64 for sending to Edge Function
+      // Prefer MP3 to reduce payload size (same compression approach as AI Practice)
       const base64AudioData: Record<string, string> = {};
       for (const key in audioBlobs.current) {
-        base64AudioData[key] = await blobToBase64(audioBlobs.current[key]);
+        const blob = audioBlobs.current[key];
+
+        try {
+          const inputFile = new File([blob], `${key}.webm`, { type: blob.type || 'audio/webm' });
+          const mp3File = await compressAudio(inputFile);
+          base64AudioData[key] = await blobToBase64(mp3File);
+        } catch (e) {
+          console.warn('[SpeakingTest] MP3 compression failed, falling back to original blob:', e);
+          base64AudioData[key] = await blobToBase64(blob);
+        }
       }
 
       console.log('Audio Blobs before Base64 conversion:', audioBlobs.current); // Log 1

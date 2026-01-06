@@ -13,6 +13,7 @@ import { AILoadingScreen } from '@/components/common/AILoadingScreen';
 import { ExitTestConfirmDialog } from '@/components/common/ExitTestConfirmDialog';
 import { describeApiError } from '@/lib/apiErrors';
 import { supabase } from '@/integrations/supabase/client';
+import { compressAudio } from '@/utils/audioCompressor';
 import {
   Clock,
   Mic,
@@ -463,21 +464,33 @@ export default function AIPracticeSpeakingTest() {
     console.log(`[AIPracticeSpeakingTest] Starting background evaluation for Part ${partNum}`);
 
     try {
-      for (const key of partKeys) {
-        const seg = segments[key];
-        const blob = new Blob(seg.chunks, { type: 'audio/webm' });
-        partDurations[key] = seg.duration;
+       for (const key of partKeys) {
+         const seg = segments[key];
+         const blob = new Blob(seg.chunks, { type: 'audio/webm' });
+         partDurations[key] = seg.duration;
 
-        if (blob.size < 512) continue;
+         if (blob.size < 512) continue;
 
-        const dataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(String(reader.result));
-          reader.readAsDataURL(blob);
-        });
+         let dataUrl: string;
+         try {
+           const inputFile = new File([blob], `${key}.webm`, { type: blob.type || 'audio/webm' });
+           const mp3File = await compressAudio(inputFile);
+           dataUrl = await new Promise<string>((resolve) => {
+             const reader = new FileReader();
+             reader.onloadend = () => resolve(String(reader.result));
+             reader.readAsDataURL(mp3File);
+           });
+         } catch (e) {
+           console.warn('[AIPracticeSpeakingTest] MP3 compression failed, falling back to webm:', e);
+           dataUrl = await new Promise<string>((resolve) => {
+             const reader = new FileReader();
+             reader.onloadend = () => resolve(String(reader.result));
+             reader.readAsDataURL(blob);
+           });
+         }
 
-        partAudioData[key] = dataUrl;
-      }
+         partAudioData[key] = dataUrl;
+       }
 
       if (Object.keys(partAudioData).length === 0) {
         console.log(`[AIPracticeSpeakingTest] No valid audio for Part ${partNum}`);
@@ -555,22 +568,34 @@ export default function AIPracticeSpeakingTest() {
       const audioData: Record<string, string> = {};
       const durations: Record<string, number> = {};
 
-      for (const key of keys) {
-        const seg = segments[key];
-        const blob = new Blob(seg.chunks, { type: 'audio/webm' });
-        durations[key] = seg.duration;
+       for (const key of keys) {
+         const seg = segments[key];
+         const blob = new Blob(seg.chunks, { type: 'audio/webm' });
+         durations[key] = seg.duration;
 
-        // Skip empty blobs
-        if (blob.size < 512) continue;
+         // Skip empty blobs
+         if (blob.size < 512) continue;
 
-        const dataUrl = await new Promise<string>((resolve) => {
-          const reader = new FileReader();
-          reader.onloadend = () => resolve(String(reader.result));
-          reader.readAsDataURL(blob);
-        });
+         let dataUrl: string;
+         try {
+           const inputFile = new File([blob], `${key}.webm`, { type: blob.type || 'audio/webm' });
+           const mp3File = await compressAudio(inputFile);
+           dataUrl = await new Promise<string>((resolve) => {
+             const reader = new FileReader();
+             reader.onloadend = () => resolve(String(reader.result));
+             reader.readAsDataURL(mp3File);
+           });
+         } catch (e) {
+           console.warn('[AIPracticeSpeakingTest] MP3 compression failed, falling back to webm:', e);
+           dataUrl = await new Promise<string>((resolve) => {
+             const reader = new FileReader();
+             reader.onloadend = () => resolve(String(reader.result));
+             reader.readAsDataURL(blob);
+           });
+         }
 
-        audioData[key] = dataUrl;
-      }
+         audioData[key] = dataUrl;
+       }
 
       // Calculate Part 2 speaking duration for fluency flag
       const part2Duration = Object.entries(segments)
