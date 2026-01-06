@@ -110,6 +110,16 @@ async function getSystemGeminiKeys(serviceClient: any): Promise<string[]> {
   }
 }
 
+// Shuffle array using Fisher-Yates algorithm
+function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
 async function generateTtsPcmBase64WithFallback({
   primaryKey,
   fallbackKeys,
@@ -121,21 +131,48 @@ async function generateTtsPcmBase64WithFallback({
   text: string;
   voiceName: string;
 }): Promise<string> {
-  // 1) Try the user's key first
-  const primary = await generateTtsPcmBase64Once({ apiKey: primaryKey, text, voiceName });
-  if (primary.status === 200) return primary.audioBase64;
-
-  // If user key is rate-limited / blocked, try system pool to keep UX working
-  if (primary.status !== 429 && primary.status !== 403) {
-    throw new Error(`Gemini TTS failed (${primary.status})`);
+  // Build a pool of all available keys (user key + system keys)
+  const allKeys = [primaryKey, ...fallbackKeys].filter(Boolean);
+  
+  if (allKeys.length === 0) {
+    throw new Error("No API keys available. Please add your Gemini API key in Settings.");
   }
 
-  for (const k of fallbackKeys) {
-    const r = await generateTtsPcmBase64Once({ apiKey: k, text, voiceName });
-    if (r.status === 200) return r.audioBase64;
+  // Shuffle the pool randomly to distribute load across all keys
+  const shuffledKeys = shuffleArray(allKeys);
+  
+  let lastStatus = 0;
+  let lastError = "";
+
+  // Try each key in random order until one succeeds
+  for (const apiKey of shuffledKeys) {
+    const result = await generateTtsPcmBase64Once({ apiKey, text, voiceName });
+    
+    if (result.status === 200) {
+      return result.audioBase64;
+    }
+    
+    lastStatus = result.status;
+    
+    // For non-rate-limit errors (except 403), fail immediately
+    if (result.status !== 429 && result.status !== 403) {
+      lastError = `Gemini TTS failed with status ${result.status}`;
+      break;
+    }
+    
+    // Continue to next key for 429/403 errors
+    console.log(`Key rate-limited (${result.status}), trying next key...`);
   }
 
-  throw new Error(`Gemini TTS failed (${primary.status})`);
+  // All keys exhausted or non-retryable error
+  if (lastStatus === 429) {
+    throw new Error("All API keys are rate-limited. Please try again later.");
+  }
+  if (lastStatus === 403) {
+    throw new Error("All API keys are blocked/forbidden. Please check your API key configuration.");
+  }
+  
+  throw new Error(lastError || `Gemini TTS failed (${lastStatus})`);
 }
 
 serve(async (req) => {
