@@ -402,115 +402,130 @@ export default function AIPractice() {
         console.log('[cache] fetched rows:', cachedTests?.length || 0, 'usedPresets:', usedPresetIds.size);
 
         if (!cacheError && cachedTests && cachedTests.length > 0) {
-          // Filter by question type
-          let matchingTests = cachedTests.filter(t => t.question_type === currentQuestionType);
+          // IMPORTANT: Preset cache must respect user selections.
+          // If we can't find a preset that matches the requested constraints, we must treat it as a cache MISS
+          // (and fall back to AI generation) rather than serving a random preset from the same module.
+
+          const normalizeTopic = (value: string) =>
+            value
+              .toLowerCase()
+              .trim()
+              .replace(/\s*&\s*/g, " and ")
+              .replace(/\s+/g, " ");
+
+          const effectiveTopicForPreset = (topicPreference.trim() || currentSmartCycle.nextTopic || "").trim();
+
+          // Apply STRICT filters (no fallback to unrelated presets)
+          let matchingTests = cachedTests.filter((t) => t.question_type === currentQuestionType);
           console.log('[cache] after question_type filter:', matchingTests.length, 'expected:', currentQuestionType);
-          
-          // If no exact match, try any test of same module
+
           if (matchingTests.length === 0) {
-            matchingTests = cachedTests;
-            console.log('[cache] no question_type match, using all cached tests');
-          }
-          
-          // Filter by difficulty
-          const difficultyMatches = matchingTests.filter(t => t.difficulty === difficulty);
-          if (difficultyMatches.length > 0) matchingTests = difficultyMatches;
-          console.log('[cache] after difficulty filter:', matchingTests.length);
-          
-          // Filter by topic if preference specified
-          if (topicPreference.trim()) {
-            const topicMatches = matchingTests.filter(t => 
-              t.topic.toLowerCase().includes(topicPreference.toLowerCase())
-            );
-            if (topicMatches.length > 0) matchingTests = topicMatches;
-            console.log('[cache] after topic filter:', matchingTests.length);
-          }
-          
-          // Exclude presets the user has already taken (avoid repetition)
-          const freshTests = matchingTests.filter(t => !usedPresetIds.has(t.id));
-          console.log('[cache] after excluding used presets:', freshTests.length, 'of', matchingTests.length);
-          
-          // If all presets used, allow re-use (reset cycle)
-          const testsToChooseFrom = freshTests.length > 0 ? freshTests : matchingTests;
+            console.log('[cache] MISS: no presets match requested question type; proceeding with edge function');
+          } else {
+            matchingTests = matchingTests.filter((t) => t.difficulty === difficulty);
+            console.log('[cache] after difficulty filter:', matchingTests.length, 'expected:', difficulty);
 
-          if (testsToChooseFrom.length > 0) {
-            // Pick random matching test
-            const cachedTest = testsToChooseFrom[Math.floor(Math.random() * testsToChooseFrom.length)];
-            const payload = cachedTest.content_payload as Record<string, unknown>;
-
-            // Normalize DB preset payloads into the UI's expected shape.
-            // `generated_test_audio.content_payload` stores { questions, instruction, table_data, ... }
-            // while the UI expects `questionGroups`.
-            const rawQuestionGroups = (payload as any)?.questionGroups ?? (payload as any)?.question_groups;
-            const rawQuestions = (payload as any)?.questions;
-
-            const normalizedQuestionGroups: unknown[] | undefined =
-              Array.isArray(rawQuestionGroups) && rawQuestionGroups.length > 0
-                ? rawQuestionGroups
-                : Array.isArray(rawQuestions) && rawQuestions.length > 0
-                  ? [
-                      {
-                        id: `preset-group-${cachedTest.id}`,
-                        instruction: (payload as any)?.instruction ?? '',
-                        question_type: cachedTest.question_type,
-                        start_question: (rawQuestions[0]?.question_number as number) ?? 1,
-                        end_question:
-                          (rawQuestions[rawQuestions.length - 1]?.question_number as number) ?? rawQuestions.length,
-                        options:
-                          (payload as any)?.table_data
-                            ? { table_data: (payload as any).table_data }
-                            : undefined,
-                        questions: rawQuestions,
-                      },
-                    ]
-                  : undefined;
-
-            // Validate payload has questionGroups
-            const questionGroups = normalizedQuestionGroups as unknown[] | undefined;
-            if (questionGroups && Array.isArray(questionGroups) && questionGroups.length > 0) {
-              console.log('[cache] HIT! Using pre-generated test:', cachedTest.id, cachedTest.topic);
-
-              // Build the GeneratedTest from cached data
-              const generatedTest: GeneratedTest = {
-                id: crypto.randomUUID(),
-                module: activeModule,
-                questionType: currentQuestionType,
-                difficulty,
-                topic: cachedTest.topic,
-                timeMinutes: timeMinutes,
-                passage: (payload as any).passage,
-                audioUrl: cachedTest.audio_url || undefined,
-                audioBase64: undefined,
-                audioFormat: undefined,
-                sampleRate: undefined,
-                transcript: cachedTest.transcript || ((payload as any).transcript as string) || undefined,
-                questionGroups: questionGroups as any,
-                writingTask: (payload as any).writingTask,
-                speakingParts: (payload as any).speakingParts,
-                isPreset: true,
-                presetId: cachedTest.id,
-                totalQuestions: (questionGroups as any[]).reduce((acc, g) => acc + (g.questions?.length || 0), 0),
-                generatedAt: new Date().toISOString(),
-              };
-
-              setCurrentTest(generatedTest);
-              await saveGeneratedTestAsync(generatedTest, user.id);
-              playCompletionSound();
-
-              toast({
-                title: 'Test Ready!',
-                description: `Using pre-generated ${activeModule} test: ${cachedTest.topic}`,
-              });
-
-              // Navigate directly
-              if (activeModule === 'reading') {
-                navigate(`/ai-practice/reading/${generatedTest.id}`);
-              } else if (activeModule === 'listening') {
-                navigate(`/ai-practice/listening/${generatedTest.id}`);
-              }
-              return; // Skip edge function call entirely
+            if (matchingTests.length === 0) {
+              console.log('[cache] MISS: no presets match requested difficulty; proceeding with edge function');
             } else {
-              console.log('[cache] MISS: payload missing valid questionGroups');
+              // Filter by topic (manual selection OR smart-cycle topic)
+              if (effectiveTopicForPreset) {
+                const wanted = normalizeTopic(effectiveTopicForPreset);
+                matchingTests = matchingTests.filter((t) => normalizeTopic(t.topic) === wanted);
+                console.log('[cache] after topic filter:', matchingTests.length, 'expected:', effectiveTopicForPreset);
+              }
+
+              if (effectiveTopicForPreset && matchingTests.length === 0) {
+                console.log('[cache] MISS: no presets match requested topic; proceeding with edge function');
+              } else {
+                // Exclude presets the user has already taken (avoid repetition)
+                const freshTests = matchingTests.filter((t) => !usedPresetIds.has(t.id));
+                console.log('[cache] after excluding used presets:', freshTests.length, 'of', matchingTests.length);
+
+                // If all presets used, allow re-use (reset cycle)
+                const testsToChooseFrom = freshTests.length > 0 ? freshTests : matchingTests;
+
+                if (testsToChooseFrom.length > 0) {
+                  // Pick random matching test
+                  const cachedTest = testsToChooseFrom[Math.floor(Math.random() * testsToChooseFrom.length)];
+                  const payload = cachedTest.content_payload as Record<string, unknown>;
+
+                  // Normalize DB preset payloads into the UI's expected shape.
+                  // `generated_test_audio.content_payload` stores { questions, instruction, table_data, ... }
+                  // while the UI expects `questionGroups`.
+                  const rawQuestionGroups = (payload as any)?.questionGroups ?? (payload as any)?.question_groups;
+                  const rawQuestions = (payload as any)?.questions;
+
+                  const normalizedQuestionGroups: unknown[] | undefined =
+                    Array.isArray(rawQuestionGroups) && rawQuestionGroups.length > 0
+                      ? rawQuestionGroups
+                      : Array.isArray(rawQuestions) && rawQuestions.length > 0
+                        ? [
+                            {
+                              id: `preset-group-${cachedTest.id}`,
+                              instruction: (payload as any)?.instruction ?? '',
+                              question_type: cachedTest.question_type,
+                              start_question: (rawQuestions[0]?.question_number as number) ?? 1,
+                              end_question:
+                                (rawQuestions[rawQuestions.length - 1]?.question_number as number) ?? rawQuestions.length,
+                              options:
+                                (payload as any)?.table_data
+                                  ? { table_data: (payload as any).table_data }
+                                  : undefined,
+                              questions: rawQuestions,
+                            },
+                          ]
+                        : undefined;
+
+                  // Validate payload has questionGroups
+                  const questionGroups = normalizedQuestionGroups as unknown[] | undefined;
+                  if (questionGroups && Array.isArray(questionGroups) && questionGroups.length > 0) {
+                    console.log('[cache] HIT! Using pre-generated test:', cachedTest.id, cachedTest.topic);
+
+                    // Build the GeneratedTest from cached data
+                    const generatedTest: GeneratedTest = {
+                      id: crypto.randomUUID(),
+                      module: activeModule,
+                      questionType: currentQuestionType,
+                      difficulty,
+                      topic: cachedTest.topic,
+                      timeMinutes: timeMinutes,
+                      passage: (payload as any).passage,
+                      audioUrl: cachedTest.audio_url || undefined,
+                      audioBase64: undefined,
+                      audioFormat: undefined,
+                      sampleRate: undefined,
+                      transcript: cachedTest.transcript || ((payload as any).transcript as string) || undefined,
+                      questionGroups: questionGroups as any,
+                      writingTask: (payload as any).writingTask,
+                      speakingParts: (payload as any).speakingParts,
+                      isPreset: true,
+                      presetId: cachedTest.id,
+                      totalQuestions: (questionGroups as any[]).reduce((acc, g) => acc + (g.questions?.length || 0), 0),
+                      generatedAt: new Date().toISOString(),
+                    };
+
+                    setCurrentTest(generatedTest);
+                    await saveGeneratedTestAsync(generatedTest, user.id);
+                    playCompletionSound();
+
+                    toast({
+                      title: 'Test Ready!',
+                      description: `Using pre-generated ${activeModule} test: ${cachedTest.topic}`,
+                    });
+
+                    // Navigate directly
+                    if (activeModule === 'reading') {
+                      navigate(`/ai-practice/reading/${generatedTest.id}`);
+                    } else if (activeModule === 'listening') {
+                      navigate(`/ai-practice/listening/${generatedTest.id}`);
+                    }
+                    return; // Skip edge function call entirely
+                  } else {
+                    console.log('[cache] MISS: payload missing valid questionGroups');
+                  }
+                }
+              }
             }
           }
         }
