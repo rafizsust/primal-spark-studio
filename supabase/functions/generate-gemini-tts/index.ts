@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 import { uploadToR2 } from "../_shared/r2Client.ts";
-import { createWavFromPcm } from "../_shared/audioCompressor.ts";
+import { createMuLawWav } from "../_shared/muLawCompressor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -156,7 +156,7 @@ serve(async (req) => {
       });
     }
 
-    const { items, voiceName }: { items: TtsItem[]; voiceName?: string } = await req.json();
+    const { items, voiceName, directory }: { items: TtsItem[]; voiceName?: string; directory?: string } = await req.json();
 
     if (!Array.isArray(items) || items.length === 0) {
       return new Response(JSON.stringify({ error: "items[] is required" }), {
@@ -188,7 +188,9 @@ serve(async (req) => {
     const geminiApiKey = await decryptApiKey(secretData.encrypted_value, appEncryptionKey);
 
     const resolvedVoice = (voiceName || "Kore").trim();
-    console.log("generate-gemini-tts: user=", user.id, "items=", items.length, "voice=", resolvedVoice);
+    // Default to "tts/" folder for user audio (ephemeral), allow override for admin audio
+    const folder = (directory || "tts").replace(/\/$/, "");
+    console.log("generate-gemini-tts: user=", user.id, "items=", items.length, "voice=", resolvedVoice, "folder=", folder);
 
     const clips: Array<{ key: string; text: string; url?: string; audioBase64?: string; sampleRate: number }> = [];
 
@@ -198,14 +200,14 @@ serve(async (req) => {
       const audioBase64 = await generateTtsPcmBase64({ apiKey: geminiApiKey, text: item.text, voiceName: resolvedVoice });
       const sampleRate = 24000;
 
-      // OPTIMIZATION: Upload WAV to R2 (MP3 compression is too CPU-intensive for edge functions)
+      // OPTIMIZATION: Upload Mu-Law WAV to R2 (50% smaller than 16-bit PCM, fast encoding)
       try {
         const textHash = await hashText(item.text + resolvedVoice);
-        const fileName = `tts/${textHash}.wav`;
+        const fileName = `${folder}/${textHash}.wav`;
 
-        // Convert PCM to WAV (MP3 encoding exceeds edge function CPU limits)
+        // Convert PCM to Mu-Law WAV (8-bit, 50% size reduction, CPU-friendly)
         const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-        const wavBuffer = createWavFromPcm(pcmBytes, sampleRate);
+        const wavBuffer = createMuLawWav(pcmBytes, sampleRate);
 
         const uploadResult = await uploadToR2(fileName, wavBuffer, "audio/wav");
 
