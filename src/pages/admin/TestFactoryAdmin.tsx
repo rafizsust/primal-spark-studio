@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAdminAccess } from "@/hooks/useAdminAccess";
@@ -14,12 +14,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
-  Factory, 
-  Play, 
-  RefreshCw, 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
+  Factory,
+  Play,
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  Clock,
   Loader2,
   Eye,
   Upload,
@@ -34,17 +34,19 @@ import {
   X,
   Calendar,
 } from "lucide-react";
-import { 
-  READING_TOPICS, 
-  LISTENING_TOPICS, 
+import {
+  READING_TOPICS,
+  LISTENING_TOPICS,
   WRITING_TASK1_TOPICS,
   WRITING_TASK2_TOPICS,
   SPEAKING_TOPICS_PART1,
   SPEAKING_TOPICS_PART2,
   SPEAKING_TOPICS_PART3,
-  SPEAKING_TOPICS_FULL 
+  SPEAKING_TOPICS_FULL,
 } from "@/lib/ieltsTopics";
 import GeneratedTestPreview from "@/components/admin/GeneratedTestPreview";
+import { compressAudio } from "@/utils/audioCompressor";
+import { uploadToR2 } from "@/lib/r2Upload";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -257,6 +259,40 @@ export default function TestFactoryAdmin() {
     };
   }, [selectedJob?.id]);
 
+  // Auto-compress speaking WAV -> MP3 in the browser (no button, avoids edge CPU limits)
+  const autoCompressedTestIdsRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (!selectedJob) return;
+    if (selectedJob.module !== "speaking") return;
+    if (!jobTests.length) return;
+
+    const candidates = jobTests.filter((t) => {
+      if (autoCompressedTestIdsRef.current.has(t.id)) return false;
+      const payload = (t.content_payload || {}) as any;
+      const audioUrls = payload.audioUrls as Record<string, string> | undefined;
+      if (!audioUrls) return false;
+      return Object.values(audioUrls).some((u) => typeof u === "string" && u.endsWith(".wav"));
+    });
+
+    if (candidates.length === 0) return;
+
+    // Fire-and-forget, but keep it sequential to avoid pegging the browser
+    (async () => {
+      for (const test of candidates) {
+        autoCompressedTestIdsRef.current.add(test.id);
+        try {
+          await autoCompressSpeakingTest(test);
+        } catch (err) {
+          console.error("Auto-compress failed:", err);
+          // Allow retry on next polling cycle
+          autoCompressedTestIdsRef.current.delete(test.id);
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobTests, selectedJob?.id]);
+
   const fetchJobs = async () => {
     try {
       const { data, error } = await supabase.functions.invoke("get-job-status");
@@ -285,6 +321,75 @@ export default function TestFactoryAdmin() {
     } catch (error) {
       console.error("Failed to fetch job details:", error);
     }
+  };
+
+  const autoCompressSpeakingTest = async (test: GeneratedTest) => {
+    const payload = (test.content_payload || {}) as any;
+    const audioUrls = payload.audioUrls as Record<string, string> | undefined;
+    if (!audioUrls) return;
+
+    // Only handle WAVs produced by bulk generation
+    const wavEntries = Object.entries(audioUrls).filter(([, url]) => typeof url === "string" && url.endsWith(".wav"));
+    if (wavEntries.length === 0) return;
+
+    const newAudioUrls: Record<string, string> = { ...audioUrls };
+
+    for (const [audioKey, wavUrl] of wavEntries) {
+      // Convert public URL -> R2 key
+      // Example: https://.../presets/speaking/<jobId>/<index>/<file>.wav
+      const urlObj = new URL(wavUrl);
+      const r2Key = urlObj.pathname.replace(/^\//, "");
+
+      const { data: dl, error: dlError } = await supabase.functions.invoke("download-media", {
+        body: { key: r2Key },
+      });
+      if (dlError) throw dlError;
+      if (!(dl as any)?.success || !(dl as any)?.base64) {
+        throw new Error((dl as any)?.error || "Download failed");
+      }
+
+      const bytes = Uint8Array.from(atob((dl as any).base64), (c) => c.charCodeAt(0));
+      const wavFile = new File([bytes], `${audioKey}.wav`, { type: (dl as any)?.contentType || "audio/wav" });
+
+      const mp3File = await compressAudio(wavFile);
+
+      const mp3Key = r2Key.replace(/\.wav$/i, ".mp3");
+      const mp3Folder = mp3Key.split("/").slice(0, -1).join("/");
+      const mp3FileName = mp3Key.split("/").pop();
+
+      const uploadRes = await uploadToR2({
+        file: mp3File,
+        folder: mp3Folder,
+        fileName: mp3FileName,
+      });
+      if (!uploadRes.success || !uploadRes.url) {
+        throw new Error(uploadRes.error || "MP3 upload failed");
+      }
+
+      // Delete WAV after MP3 is safely uploaded
+      const { data: del, error: delErr } = await supabase.functions.invoke("delete-media", {
+        body: { key: r2Key },
+      });
+      if (delErr) throw delErr;
+      if (!(del as any)?.success) {
+        throw new Error((del as any)?.error || "Failed to delete WAV");
+      }
+
+      newAudioUrls[audioKey] = uploadRes.url;
+    }
+
+    const newPayload = {
+      ...payload,
+      audioUrls: newAudioUrls,
+      audioFormat: "mp3",
+    };
+
+    const { error: updateErr } = await supabase
+      .from("generated_test_audio")
+      .update({ content_payload: newPayload })
+      .eq("id", test.id);
+
+    if (updateErr) throw updateErr;
   };
 
   const startGeneration = async () => {
