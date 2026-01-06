@@ -141,8 +141,13 @@ export async function compressAudio(
  * Check if FFmpeg compression is supported in this browser
  */
 export function isCompressionSupported(): boolean {
-  // Check for SharedArrayBuffer support (required for FFmpeg WASM)
-  return typeof SharedArrayBuffer !== 'undefined';
+  // FFmpeg WASM needs SharedArrayBuffer, which is only available in a cross-origin isolated context.
+  // In Chrome this is controlled by COOP/COEP response headers.
+  return (
+    typeof SharedArrayBuffer !== 'undefined' &&
+    typeof crossOriginIsolated !== 'undefined' &&
+    crossOriginIsolated === true
+  );
 }
 
 /**

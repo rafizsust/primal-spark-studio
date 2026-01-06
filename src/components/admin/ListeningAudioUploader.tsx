@@ -81,7 +81,7 @@ export function ListeningAudioUploader({
         setCompressionProgress(0);
       }
     } else {
-      toast.info('Browser does not support compression, uploading original...');
+      toast.info('Compression unavailable (page is not cross-origin isolated). Uploading original...');
     }
 
     try {
