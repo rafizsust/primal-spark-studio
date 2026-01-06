@@ -1,6 +1,7 @@
 // Types for AI Practice feature
 import { supabase } from '@/integrations/supabase/client';
 import { uploadToR2 } from '@/lib/r2Upload';
+import { compressAudio } from '@/utils/audioCompressor';
 import type { Json } from '@/integrations/supabase/types';
 
 export type PracticeModule = 'reading' | 'listening' | 'writing' | 'speaking';
@@ -382,15 +383,19 @@ export async function saveGeneratedTestAsync(test: GeneratedTest, userId: string
     console.log('[saveGeneratedTestAsync] Updated cache with trigger-populated audio_url:', insertedRow.audio_url);
   }
 
-  // If this is a listening test with base64 audio (non-preset), upload a WAV so history/retake can play audio.
+  // If this is a listening test with base64 audio (non-preset), compress to MP3 and upload
   if (test.module === 'listening' && test.audioBase64) {
     try {
       const pcmBytes = Uint8Array.from(atob(test.audioBase64), (c) => c.charCodeAt(0));
       const wavBlob = pcmToWav(pcmBytes, test.sampleRate || 24000);
-      const fileName = `${test.id}.wav`;
+      const wavFile = new File([wavBlob], `${test.id}.wav`, { type: 'audio/wav' });
+
+      // Compress to MP3 for 80-90% size reduction
+      const compressedFile = await compressAudio(wavFile);
+      const fileName = `${test.id}.mp3`;
 
       const result = await uploadToR2({
-        file: new File([wavBlob], fileName, { type: 'audio/wav' }),
+        file: compressedFile,
         folder: `listening-audios/ai-practice/${userId}`,
         fileName,
       });

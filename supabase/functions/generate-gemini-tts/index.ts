@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 import { uploadToR2 } from "../_shared/r2Client.ts";
+import { compressPcmBase64ToMp3 } from "../_shared/audioCompressor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -197,18 +198,18 @@ serve(async (req) => {
       const audioBase64 = await generateTtsPcmBase64({ apiKey: geminiApiKey, text: item.text, voiceName: resolvedVoice });
       const sampleRate = 24000;
 
-      // OPTIMIZATION: Try to upload to R2 for bandwidth savings
+      // OPTIMIZATION: Compress to MP3 and upload to R2 for bandwidth savings
       try {
         const textHash = await hashText(item.text + resolvedVoice);
-        const fileName = `tts/${textHash}.wav`;
-        
-        // Convert PCM to WAV for better compatibility
-        const wavBuffer = pcmToWavBuffer(audioBase64, sampleRate);
-        
-        const uploadResult = await uploadToR2(fileName, wavBuffer, "audio/wav");
-        
+        const fileName = `tts/${textHash}.mp3`;
+
+        // Compress PCM to MP3 (80-90% smaller than WAV)
+        const mp3Buffer = compressPcmBase64ToMp3(audioBase64, sampleRate);
+
+        const uploadResult = await uploadToR2(fileName, mp3Buffer, "audio/mpeg");
+
         if (uploadResult.success && uploadResult.url) {
-          console.log("TTS audio uploaded to R2:", uploadResult.url);
+          console.log("TTS audio compressed & uploaded to R2:", uploadResult.url);
           clips.push({ 
             key: item.key, 
             text: item.text, 
