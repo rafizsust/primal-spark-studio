@@ -4,55 +4,42 @@
  * Converts 16-bit linear PCM to 8-bit Mu-Law format.
  * Benefits:
  * - 50% file size reduction (16-bit → 8-bit)
- * - Very fast (simple table lookup, no CPU-heavy encoding)
+ * - Very fast (simple formula, no CPU-heavy encoding)
  * - Wide browser compatibility (WAV with Mu-Law is well-supported)
  * - Perfect for speech audio (designed for voice telephony)
  */
 
-// Mu-Law encoding lookup table (16-bit to 8-bit)
-// Pre-computed for maximum performance
-const MU_LAW_ENCODE_TABLE = new Uint8Array(65536);
-
-// Initialize the encoding table
-(function initMuLawTable() {
-  const BIAS = 0x84;  // 132
-  const MAX = 32635;  // Maximum amplitude for 14-bit precision
-  
-  for (let i = 0; i < 65536; i++) {
-    // Convert unsigned 16-bit index to signed 16-bit sample
-    let sample = i < 32768 ? i : i - 65536;
-    
-    // Get sign and make sample positive
-    const sign = sample < 0 ? 0x80 : 0;
-    if (sample < 0) sample = -sample;
-    
-    // Clip to maximum
-    if (sample > MAX) sample = MAX;
-    
-    // Add bias
-    sample += BIAS;
-    
-    // Find segment (exponent)
-    let exponent = 7;
-    for (let expMask = 0x4000; (sample & expMask) === 0 && exponent > 0; expMask >>= 1) {
-      exponent--;
-    }
-    
-    // Extract mantissa
-    const mantissa = (sample >> (exponent + 3)) & 0x0F;
-    
-    // Combine sign, exponent, mantissa and invert
-    MU_LAW_ENCODE_TABLE[i] = ~(sign | (exponent << 4) | mantissa) & 0xFF;
-  }
-})();
+const BIAS = 0x84;  // 132
+const CLIP = 32635; // Maximum amplitude for 14-bit precision
 
 /**
- * Convert a single 16-bit sample to 8-bit Mu-Law
+ * Convert a single 16-bit linear sample to 8-bit Mu-Law
+ * Uses the standard G.711 algorithm without lookup tables for reliability
  */
 function linearToMuLaw(sample: number): number {
-  // Convert signed 16-bit to unsigned index
-  const index = sample < 0 ? sample + 65536 : sample;
-  return MU_LAW_ENCODE_TABLE[index];
+  // Get sign bit
+  const sign = (sample < 0) ? 0x80 : 0;
+  if (sample < 0) sample = -sample;
+  
+  // Clip to maximum
+  if (sample > CLIP) sample = CLIP;
+  
+  // Add bias for better dynamic range
+  sample += BIAS;
+  
+  // Find the segment (exponent) - count leading zeros
+  let exponent = 7;
+  let expMask = 0x4000;
+  while ((sample & expMask) === 0 && exponent > 0) {
+    exponent--;
+    expMask >>= 1;
+  }
+  
+  // Extract 4-bit mantissa from the appropriate position
+  const mantissa = (sample >> (exponent + 3)) & 0x0F;
+  
+  // Combine and invert (Mu-Law uses inverted bits for better transmission)
+  return ~(sign | (exponent << 4) | mantissa) & 0xFF;
 }
 
 /**
