@@ -1577,15 +1577,18 @@ async function generateSpeakingAudio(
     return null;
   }
 
+
   console.log(`[Job ${jobId}] Generating audio for ${ttsItems.length} speaking items (${questionType}) using PARALLEL Gemini TTS`);
 
-// Use MP3 for speaking audio (short clips ~5-30s each, MP3 encoding is fast for these)
-  const { compressPcmToMp3 } = await import("../_shared/audioCompressor.ts");
+  // IMPORTANT: Do NOT MP3-encode inside the edge function.
+  // Full speaking tests can exceed CPU limits during MP3 encoding.
+  // We upload WAV here and (optionally) let the admin UI auto-compress to MP3 client-side.
+  const { createWavFromPcm } = await import("../_shared/audioCompressor.ts");
   const { uploadToR2 } = await import("../_shared/r2Client.ts");
 
   // Process TTS items in parallel with concurrency limit (use all available API keys efficiently)
   const concurrency = Math.min(apiKeyCache.length || 3, 5);
-  
+
   const results = await processWithConcurrency(
     ttsItems,
     async (item) => {
@@ -1597,12 +1600,12 @@ async function generateSpeakingAudio(
         );
 
         const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-        // Compress to MP3 for efficient storage (speaking clips are short, so MP3 encoding is fast)
-        const mp3Bytes = compressPcmToMp3(pcmBytes, sampleRate);
-        // Admin speaking audio goes to "presets/" folder for permanent storage
-        const key = `presets/speaking/${jobId}/${index}/${item.key}.mp3`;
+        const wavBytes = createWavFromPcm(pcmBytes, sampleRate);
 
-        const uploadResult = await uploadToR2(key, mp3Bytes, "audio/mpeg");
+        // Admin speaking audio goes to "presets/" folder for permanent storage
+        const key = `presets/speaking/${jobId}/${index}/${item.key}.wav`;
+
+        const uploadResult = await uploadToR2(key, wavBytes, "audio/wav");
         if (uploadResult.success && uploadResult.url) {
           return { key: item.key, url: uploadResult.url };
         }
