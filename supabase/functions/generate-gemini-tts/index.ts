@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 import { uploadToR2 } from "../_shared/r2Client.ts";
-import { compressPcmBase64ToMp3 } from "../_shared/audioCompressor.ts";
+import { createWavFromPcm } from "../_shared/audioCompressor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -198,18 +198,19 @@ serve(async (req) => {
       const audioBase64 = await generateTtsPcmBase64({ apiKey: geminiApiKey, text: item.text, voiceName: resolvedVoice });
       const sampleRate = 24000;
 
-      // OPTIMIZATION: Compress to MP3 and upload to R2 for bandwidth savings
+      // OPTIMIZATION: Upload WAV to R2 (MP3 compression is too CPU-intensive for edge functions)
       try {
         const textHash = await hashText(item.text + resolvedVoice);
-        const fileName = `tts/${textHash}.mp3`;
+        const fileName = `tts/${textHash}.wav`;
 
-        // Compress PCM to MP3 (80-90% smaller than WAV)
-        const mp3Buffer = compressPcmBase64ToMp3(audioBase64, sampleRate);
+        // Convert PCM to WAV (MP3 encoding exceeds edge function CPU limits)
+        const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
+        const wavBuffer = createWavFromPcm(pcmBytes, sampleRate);
 
-        const uploadResult = await uploadToR2(fileName, mp3Buffer, "audio/mpeg");
+        const uploadResult = await uploadToR2(fileName, wavBuffer, "audio/wav");
 
         if (uploadResult.success && uploadResult.url) {
-          console.log("TTS audio compressed & uploaded to R2:", uploadResult.url);
+          console.log("TTS audio uploaded to R2:", uploadResult.url);
           clips.push({ 
             key: item.key, 
             text: item.text, 
