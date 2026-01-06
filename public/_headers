@@ -1,8 +1,3 @@
 /*
-  Cross-origin isolation headers for SharedArrayBuffer (ffmpeg.wasm).
-  Many static hosts (Netlify/Cloudflare Pages/etc.) support this _headers file.
-*/
-/*
   Cross-Origin-Opener-Policy: same-origin
   Cross-Origin-Embedder-Policy: require-corp
-*/
