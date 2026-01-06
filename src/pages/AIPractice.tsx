@@ -472,7 +472,7 @@ export default function AIPractice() {
 
               // Build the GeneratedTest from cached data
               const generatedTest: GeneratedTest = {
-                id: `cached-${cachedTest.id}-${Date.now()}`,
+                id: crypto.randomUUID(),
                 module: activeModule,
                 questionType: currentQuestionType,
                 difficulty,
