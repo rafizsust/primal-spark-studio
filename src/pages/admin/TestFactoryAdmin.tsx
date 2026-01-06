@@ -13,8 +13,7 @@ import { Progress } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { compressAudio } from "@/utils/audioCompressor";
-import { 
+import {
   Factory, 
   Play, 
   RefreshCw, 
@@ -175,11 +174,6 @@ export default function TestFactoryAdmin() {
   const [quantity, setQuantity] = useState<number>(5);
   const [monologue, setMonologue] = useState<boolean>(false);
   const [isGenerating, setIsGenerating] = useState(false);
-
-  // Client-side audio optimization (avoids Edge CPU limits)
-  const [isCompressingSpeakingAudio, setIsCompressingSpeakingAudio] = useState(false);
-  const [speakingAudioCompressProgress, setSpeakingAudioCompressProgress] = useState(0);
-
   // Jobs state
   const [jobs, setJobs] = useState<GenerationJob[]>([]);
   const [selectedJob, setSelectedJob] = useState<GenerationJob | null>(null);
@@ -354,102 +348,6 @@ export default function TestFactoryAdmin() {
     }
   };
 
-  const compressSpeakingAudioForSelectedJob = async () => {
-    if (!selectedJob || selectedJob.module !== "speaking") return;
-    if (selectedJob.status !== "completed") {
-      toast.error("Wait for the job to complete before compressing audio.");
-      return;
-    }
-
-    const tests = jobTests.filter((t) => t.status !== "failed");
-    if (tests.length === 0) {
-      toast.error("No successful tests found to compress.");
-      return;
-    }
-
-    setIsCompressingSpeakingAudio(true);
-    setSpeakingAudioCompressProgress(0);
-
-    try {
-      let processed = 0;
-      let convertedClips = 0;
-
-      for (const test of tests) {
-        const payload = (test.content_payload || {}) as any;
-        const audioUrls: Record<string, string> | undefined = payload.audioUrls;
-
-        if (!audioUrls || Object.keys(audioUrls).length === 0) {
-          processed++;
-          setSpeakingAudioCompressProgress(Math.round((processed / tests.length) * 100));
-          continue;
-        }
-
-        const updatedAudioUrls: Record<string, string> = { ...audioUrls };
-
-        for (const [clipKey, url] of Object.entries(audioUrls)) {
-          if (!url || !/\.wav(\?|$)/i.test(url)) continue;
-
-          const u = new URL(url);
-          const wavKey = u.pathname.replace(/^\//, "");
-          const folder = wavKey.split("/").slice(0, -1).join("/");
-          const wavFileName = wavKey.split("/").pop() || `${clipKey}.wav`;
-          const mp3FileName = wavFileName.replace(/\.wav$/i, ".mp3");
-
-          const resp = await fetch(url);
-          if (!resp.ok) throw new Error(`Failed to download WAV (${resp.status})`);
-          const wavBlob = await resp.blob();
-
-          const wavFile = new File([wavBlob], wavFileName, { type: wavBlob.type || "audio/wav" });
-          const mp3File = await compressAudio(wavFile);
-
-          const form = new FormData();
-          form.append("file", mp3File);
-          form.append("folder", folder);
-          form.append("fileName", mp3FileName);
-
-          const { data: uploadData, error: uploadError } = await supabase.functions.invoke("upload-media", {
-            body: form,
-          });
-
-          if (uploadError) throw uploadError;
-          const mp3Url = (uploadData as any)?.url as string | undefined;
-          if (!mp3Url) throw new Error("MP3 upload did not return a URL");
-
-          updatedAudioUrls[clipKey] = mp3Url;
-          convertedClips++;
-
-          // Delete the old WAV to avoid double storage
-          await supabase.functions.invoke("delete-media", {
-            body: { key: wavKey },
-          });
-        }
-
-        const nextPayload = {
-          ...payload,
-          audioUrls: updatedAudioUrls,
-          audioFormat: "mp3",
-        };
-
-        const { error: updateError } = await supabase
-          .from("generated_test_audio")
-          .update({ content_payload: nextPayload })
-          .eq("id", test.id);
-
-        if (updateError) throw updateError;
-
-        processed++;
-        setSpeakingAudioCompressProgress(Math.round((processed / tests.length) * 100));
-      }
-
-      toast.success(`Compressed ${convertedClips} clips to MP3.`);
-      await fetchJobDetails(selectedJob.id);
-    } catch (e: any) {
-      console.error("[TestFactoryAdmin] Speaking audio compression failed:", e);
-      toast.error(e?.message || "Speaking audio compression failed");
-    } finally {
-      setIsCompressingSpeakingAudio(false);
-    }
-  };
 
   const deleteTest = async (testId: string) => {
     setIsDeleting(true);
@@ -980,27 +878,6 @@ export default function TestFactoryAdmin() {
                   </CardDescription>
                 </div>
                 <div className="flex gap-2">
-                  {selectedJob.module === "speaking" && selectedJob.status === "completed" && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={compressSpeakingAudioForSelectedJob}
-                      disabled={isCompressingSpeakingAudio}
-                      title="Bulk MP3 encoding in Edge Functions hits CPU limits; this runs in your browser instead."
-                    >
-                      {isCompressingSpeakingAudio ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Compressing… {speakingAudioCompressProgress}%
-                        </>
-                      ) : (
-                        <>
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Compress Speaking Audio (MP3)
-                        </>
-                      )}
-                    </Button>
-                  )}
 
                   <Button
                     variant="outline"
