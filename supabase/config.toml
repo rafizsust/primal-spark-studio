@@ -81,3 +81,6 @@ verify_jwt = true
 
 [functions.cleanup-expired-tests]
 verify_jwt = false
+
+[functions.delete-media]
+verify_jwt = true
