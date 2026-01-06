@@ -1567,54 +1567,6 @@ async function generateSpeakingAudio(
   return Object.keys(audioUrls).length > 0 ? audioUrls : null;
 }
 
-// Create WAV from PCM data (mono, 16-bit, 24kHz - optimized for speech)
-// Note: Gemini TTS returns PCM at 24kHz mono which is already optimal for spoken word.
-// WAV format is used for maximum browser compatibility.
-// For production at scale, consider CDN transcoding to MP3/Opus.
-function createWavFromPcm(pcmData: Uint8Array, sampleRate: number): Uint8Array {
-  const numChannels = 1; // Mono - optimal for spoken word (half the size of stereo)
-  const bitsPerSample = 16;
-  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-  const blockAlign = numChannels * (bitsPerSample / 8);
-  const dataSize = pcmData.length;
-  const headerSize = 44;
-  const fileSize = headerSize + dataSize;
-
-  const buffer = new ArrayBuffer(fileSize);
-  const view = new DataView(buffer);
-
-  // RIFF header
-  writeString(view, 0, "RIFF");
-  view.setUint32(4, fileSize - 8, true);
-  writeString(view, 8, "WAVE");
-
-  // fmt chunk
-  writeString(view, 12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, numChannels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, byteRate, true);
-  view.setUint16(32, blockAlign, true);
-  view.setUint16(34, bitsPerSample, true);
-
-  // data chunk
-  writeString(view, 36, "data");
-  view.setUint32(40, dataSize, true);
-
-  // Copy PCM data
-  const wavBytes = new Uint8Array(buffer);
-  wavBytes.set(pcmData, headerSize);
-
-  return wavBytes;
-}
-
-function writeString(view: DataView, offset: number, str: string): void {
-  for (let i = 0; i < str.length; i++) {
-    view.setUint8(offset + i, str.charCodeAt(i));
-  }
-}
-
 // Declare EdgeRuntime for TypeScript
 declare const EdgeRuntime: {
   waitUntil?: (promise: Promise<any>) => void;
