@@ -45,7 +45,7 @@ async function hashText(text: string): Promise<string> {
     .join("");
 }
 
-async function generateTtsPcmBase64({
+async function generateTtsPcmBase64Once({
   apiKey,
   text,
   voiceName,
@@ -53,7 +53,7 @@ async function generateTtsPcmBase64({
   apiKey: string;
   text: string;
   voiceName: string;
-}): Promise<string> {
+}): Promise<{ audioBase64: string; status: number }> {
   const prompt = `You are an IELTS Speaking examiner with a neutral British accent.\n\nRead aloud EXACTLY the following text. Do not add, remove, or paraphrase anything. Use natural pacing and clear pronunciation.\n\n"""\n${text}\n"""`;
 
   const resp = await fetch(
@@ -77,15 +77,65 @@ async function generateTtsPcmBase64({
 
   if (!resp.ok) {
     const t = await resp.text();
-    console.error("Gemini TTS error:", resp.status, t);
-    throw new Error(`Gemini TTS failed (${resp.status})`);
+    console.error("Gemini TTS error:", resp.status, t.slice(0, 300));
+    return { audioBase64: "", status: resp.status };
   }
 
   const data = await resp.json();
   const audioData = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data as string | undefined;
   if (!audioData) throw new Error("No audio returned from Gemini TTS");
 
-  return audioData;
+  return { audioBase64: audioData, status: 200 };
+}
+
+async function getSystemGeminiKeys(serviceClient: any): Promise<string[]> {
+  try {
+    const { data, error } = await serviceClient
+      .from("api_keys")
+      .select("key_value")
+      .eq("provider", "gemini")
+      .eq("is_active", true)
+      .order("error_count", { ascending: true })
+      .limit(10);
+
+    if (error) {
+      console.warn("Failed to fetch system Gemini keys:", error);
+      return [];
+    }
+
+    return (data || []).map((r: any) => String(r.key_value)).filter(Boolean);
+  } catch (e) {
+    console.warn("System key fetch error:", e);
+    return [];
+  }
+}
+
+async function generateTtsPcmBase64WithFallback({
+  primaryKey,
+  fallbackKeys,
+  text,
+  voiceName,
+}: {
+  primaryKey: string;
+  fallbackKeys: string[];
+  text: string;
+  voiceName: string;
+}): Promise<string> {
+  // 1) Try the user's key first
+  const primary = await generateTtsPcmBase64Once({ apiKey: primaryKey, text, voiceName });
+  if (primary.status === 200) return primary.audioBase64;
+
+  // If user key is rate-limited / blocked, try system pool to keep UX working
+  if (primary.status !== 429 && primary.status !== 403) {
+    throw new Error(`Gemini TTS failed (${primary.status})`);
+  }
+
+  for (const k of fallbackKeys) {
+    const r = await generateTtsPcmBase64Once({ apiKey: k, text, voiceName });
+    if (r.status === 200) return r.audioBase64;
+  }
+
+  throw new Error(`Gemini TTS failed (${primary.status})`);
 }
 
 serve(async (req) => {
@@ -145,37 +195,61 @@ serve(async (req) => {
 
     const geminiApiKey = await decryptApiKey(secretData.encrypted_value, appEncryptionKey);
 
+    // Service client used ONLY for system-pool fallback keys (prevents user TTS from hard-failing on 429)
+    const serviceClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
+    );
+    const systemKeys = await getSystemGeminiKeys(serviceClient);
+
     const resolvedVoice = (voiceName || "Kore").trim();
     // Default to "tts/" folder for user audio (ephemeral), allow override for admin audio
     const folder = (directory || "tts").replace(/\/$/, "");
-    console.log("generate-gemini-tts: user=", user.id, "items=", items.length, "voice=", resolvedVoice, "folder=", folder);
+
+    // IMPORTANT: Gemini returns PCM at ~24000Hz 16-bit. We downsample to 8000Hz (speech-safe)
+    // before Mu-Law encoding to materially reduce storage cost.
+    const inputSampleRate = 24000;
+    const outputSampleRate = 8000;
+
+    console.log(
+      "generate-gemini-tts:",
+      "user=", user.id,
+      "items=", items.length,
+      "voice=", resolvedVoice,
+      "folder=", folder,
+      "sr(in/out)=", `${inputSampleRate}/${outputSampleRate}`
+    );
 
     const clips: Array<{ key: string; text: string; url?: string; audioBase64?: string; sampleRate: number }> = [];
 
     for (const item of items) {
       if (!item?.key || !item?.text) continue;
-      
-      const audioBase64 = await generateTtsPcmBase64({ apiKey: geminiApiKey, text: item.text, voiceName: resolvedVoice });
-      const sampleRate = 24000;
 
-      // OPTIMIZATION: Upload Mu-Law WAV to R2 (50% smaller than 16-bit PCM, fast encoding)
+      const audioBase64 = await generateTtsPcmBase64WithFallback({
+        primaryKey: geminiApiKey,
+        fallbackKeys: systemKeys,
+        text: item.text,
+        voiceName: resolvedVoice,
+      });
+
+      // OPTIMIZATION: Upload Mu-Law WAV to R2 (CPU-friendly). We additionally downsample to 8kHz for real storage savings.
       try {
         const textHash = await hashText(item.text + resolvedVoice);
         const fileName = `${folder}/${textHash}.wav`;
 
-        // Convert PCM to Mu-Law WAV (8-bit, 50% size reduction, CPU-friendly)
         const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-        const wavBuffer = createMuLawWav(pcmBytes, sampleRate);
+        const wavBuffer = createMuLawWav(pcmBytes, inputSampleRate, outputSampleRate);
+
+        console.log("generate-gemini-tts: wav bytes=", wavBuffer.length, "key=", fileName);
 
         const uploadResult = await uploadToR2(fileName, wavBuffer, "audio/wav");
 
         if (uploadResult.success && uploadResult.url) {
-          console.log("TTS audio uploaded to R2:", uploadResult.url);
-          clips.push({ 
-            key: item.key, 
-            text: item.text, 
-            url: uploadResult.url, 
-            sampleRate 
+          clips.push({
+            key: item.key,
+            text: item.text,
+            url: uploadResult.url,
+            sampleRate: outputSampleRate,
           });
           continue;
         } else {
@@ -186,7 +260,7 @@ serve(async (req) => {
       }
 
       // Fallback: return base64 if R2 upload fails
-      clips.push({ key: item.key, text: item.text, audioBase64, sampleRate });
+      clips.push({ key: item.key, text: item.text, audioBase64, sampleRate: inputSampleRate });
     }
 
     return new Response(JSON.stringify({ success: true, clips }), {
