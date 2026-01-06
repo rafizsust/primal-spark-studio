@@ -78,3 +78,6 @@ verify_jwt = false
 
 [functions.publish-generated-tests]
 verify_jwt = true
+
+[functions.cleanup-expired-tests]
+verify_jwt = false
