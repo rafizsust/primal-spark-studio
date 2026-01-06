@@ -45,6 +45,25 @@ async function hashText(text: string): Promise<string> {
     .join("");
 }
 
+// Exponential backoff configuration
+const MAX_RETRIES = 3;
+const BASE_DELAY_MS = 1000;
+const MAX_DELAY_MS = 10000;
+
+// Concurrency control for request queuing
+const MAX_CONCURRENT_REQUESTS = 3; // Limit concurrent TTS requests
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function getBackoffDelay(attempt: number): number {
+  // Exponential backoff with jitter: base * 2^attempt + random jitter
+  const exponentialDelay = BASE_DELAY_MS * Math.pow(2, attempt);
+  const jitter = Math.random() * 500; // Add 0-500ms jitter
+  return Math.min(exponentialDelay + jitter, MAX_DELAY_MS);
+}
+
 async function generateTtsPcmBase64Once({
   apiKey,
   text,
@@ -120,6 +139,43 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
+// Generate TTS with exponential backoff retry
+async function generateTtsPcmBase64WithRetry({
+  apiKey,
+  text,
+  voiceName,
+}: {
+  apiKey: string;
+  text: string;
+  voiceName: string;
+}): Promise<{ audioBase64: string; status: number }> {
+  let lastResult = { audioBase64: "", status: 0 };
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const result = await generateTtsPcmBase64Once({ apiKey, text, voiceName });
+    lastResult = result;
+
+    if (result.status === 200) {
+      return result;
+    }
+
+    // Only retry on rate limit (429) - other errors fail immediately
+    if (result.status !== 429) {
+      return result;
+    }
+
+    // Don't wait after the last attempt
+    if (attempt < MAX_RETRIES) {
+      const delay = getBackoffDelay(attempt);
+      console.log(`Rate limited (429), retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_RETRIES})...`);
+      await sleep(delay);
+    }
+  }
+
+  console.log(`All ${MAX_RETRIES} retries exhausted for key`);
+  return lastResult;
+}
+
 async function generateTtsPcmBase64WithFallback({
   primaryKey,
   fallbackKeys,
@@ -144,9 +200,9 @@ async function generateTtsPcmBase64WithFallback({
   let lastStatus = 0;
   let lastError = "";
 
-  // Try each key in random order until one succeeds
+  // Try each key in random order with retry logic
   for (const apiKey of shuffledKeys) {
-    const result = await generateTtsPcmBase64Once({ apiKey, text, voiceName });
+    const result = await generateTtsPcmBase64WithRetry({ apiKey, text, voiceName });
     
     if (result.status === 200) {
       return result.audioBase64;
@@ -161,7 +217,7 @@ async function generateTtsPcmBase64WithFallback({
     }
     
     // Continue to next key for 429/403 errors
-    console.log(`Key rate-limited (${result.status}), trying next key...`);
+    console.log(`Key exhausted after retries (${result.status}), trying next key...`);
   }
 
   // All keys exhausted or non-retryable error
@@ -173,6 +229,111 @@ async function generateTtsPcmBase64WithFallback({
   }
   
   throw new Error(lastError || `Gemini TTS failed (${lastStatus})`);
+}
+
+// Request queue for concurrency control
+class RequestQueue {
+  private queue: Array<{ task: () => Promise<unknown>; resolve: (value: unknown) => void; reject: (error: unknown) => void }> = [];
+  private running = 0;
+  private maxConcurrent: number;
+
+  constructor(maxConcurrent: number) {
+    this.maxConcurrent = maxConcurrent;
+  }
+
+  add<T>(task: () => Promise<T>): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      this.queue.push({ 
+        task: task as () => Promise<unknown>, 
+        resolve: resolve as (value: unknown) => void, 
+        reject 
+      });
+      this.processQueue();
+    });
+  }
+
+  private processQueue(): void {
+    if (this.running >= this.maxConcurrent || this.queue.length === 0) {
+      return;
+    }
+
+    this.running++;
+    const { task, resolve, reject } = this.queue.shift()!;
+
+    task()
+      .then(resolve)
+      .catch(reject)
+      .finally(() => {
+        this.running--;
+        this.processQueue();
+      });
+  }
+}
+
+// Process items with concurrency control
+async function processItemsWithQueue({
+  items,
+  geminiApiKey,
+  systemKeys,
+  voiceName,
+  folder,
+  sampleRate,
+}: {
+  items: TtsItem[];
+  geminiApiKey: string;
+  systemKeys: string[];
+  voiceName: string;
+  folder: string;
+  sampleRate: number;
+}): Promise<Array<{ key: string; text: string; url?: string; audioBase64?: string; sampleRate: number }>> {
+  const queue = new RequestQueue(MAX_CONCURRENT_REQUESTS);
+
+  console.log(`Processing ${items.length} items with max ${MAX_CONCURRENT_REQUESTS} concurrent requests`);
+
+  const tasks = items.map((item) =>
+    queue.add(async () => {
+      if (!item?.key || !item?.text) return null;
+
+      const audioBase64 = await generateTtsPcmBase64WithFallback({
+        primaryKey: geminiApiKey,
+        fallbackKeys: systemKeys,
+        text: item.text,
+        voiceName,
+      });
+
+      // Upload standard 16-bit PCM WAV to R2 (full quality, no Mu-Law degradation)
+      try {
+        const textHash = await hashText(item.text + voiceName);
+        const fileName = `${folder}/${textHash}.wav`;
+
+        const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
+        const wavBuffer = createPcmWav(pcmBytes, sampleRate);
+
+        console.log("generate-gemini-tts: wav bytes=", wavBuffer.length, "key=", fileName);
+
+        const uploadResult = await uploadToR2(fileName, wavBuffer, "audio/wav");
+
+        if (uploadResult.success && uploadResult.url) {
+          return {
+            key: item.key,
+            text: item.text,
+            url: uploadResult.url,
+            sampleRate,
+          };
+        } else {
+          console.warn("R2 upload failed, falling back to base64:", uploadResult.error);
+        }
+      } catch (r2Error) {
+        console.warn("R2 upload error, falling back to base64:", r2Error);
+      }
+
+      // Fallback: return base64 if R2 upload fails
+      return { key: item.key, text: item.text, audioBase64, sampleRate };
+    })
+  );
+
+  const results = await Promise.all(tasks);
+  return results.filter((r): r is NonNullable<typeof r> => r !== null);
 }
 
 serve(async (req) => {
@@ -255,48 +416,15 @@ serve(async (req) => {
       "sampleRate=", sampleRate
     );
 
-    const clips: Array<{ key: string; text: string; url?: string; audioBase64?: string; sampleRate: number }> = [];
-
-    for (const item of items) {
-      if (!item?.key || !item?.text) continue;
-
-      const audioBase64 = await generateTtsPcmBase64WithFallback({
-        primaryKey: geminiApiKey,
-        fallbackKeys: systemKeys,
-        text: item.text,
-        voiceName: resolvedVoice,
-      });
-
-      // Upload standard 16-bit PCM WAV to R2 (full quality, no Mu-Law degradation)
-      try {
-        const textHash = await hashText(item.text + resolvedVoice);
-        const fileName = `${folder}/${textHash}.wav`;
-
-        const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-        const wavBuffer = createPcmWav(pcmBytes, sampleRate);
-
-        console.log("generate-gemini-tts: wav bytes=", wavBuffer.length, "key=", fileName);
-
-        const uploadResult = await uploadToR2(fileName, wavBuffer, "audio/wav");
-
-        if (uploadResult.success && uploadResult.url) {
-          clips.push({
-            key: item.key,
-            text: item.text,
-            url: uploadResult.url,
-            sampleRate,
-          });
-          continue;
-        } else {
-          console.warn("R2 upload failed, falling back to base64:", uploadResult.error);
-        }
-      } catch (r2Error) {
-        console.warn("R2 upload error, falling back to base64:", r2Error);
-      }
-
-      // Fallback: return base64 if R2 upload fails
-      clips.push({ key: item.key, text: item.text, audioBase64, sampleRate });
-    }
+    // Process items with concurrency control and queuing
+    const clips = await processItemsWithQueue({
+      items,
+      geminiApiKey,
+      systemKeys,
+      voiceName: resolvedVoice,
+      folder,
+      sampleRate,
+    });
 
     return new Response(JSON.stringify({ success: true, clips }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
