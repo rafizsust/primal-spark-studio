@@ -38,7 +38,11 @@ import {
 import { 
   READING_TOPICS, 
   LISTENING_TOPICS, 
-  WRITING_TASK2_TOPICS, 
+  WRITING_TASK1_TOPICS,
+  WRITING_TASK2_TOPICS,
+  SPEAKING_TOPICS_PART1,
+  SPEAKING_TOPICS_PART2,
+  SPEAKING_TOPICS_PART3,
   SPEAKING_TOPICS_FULL 
 } from "@/lib/ieltsTopics";
 import GeneratedTestPreview from "@/components/admin/GeneratedTestPreview";
@@ -138,17 +142,22 @@ const QUESTION_TYPES = {
   ],
 };
 
-// Get topics by module
-function getTopicsForModule(module: string): readonly string[] {
+// Get topics by module and question type (synced with AIPractice.tsx)
+function getTopicsForModule(module: string, questionType?: string): readonly string[] {
   switch (module) {
     case "reading":
       return READING_TOPICS;
     case "listening":
       return LISTENING_TOPICS;
     case "writing":
-      return WRITING_TASK2_TOPICS;
+      return questionType === "TASK_1" ? WRITING_TASK1_TOPICS : WRITING_TASK2_TOPICS;
     case "speaking":
-      return SPEAKING_TOPICS_FULL;
+      switch (questionType) {
+        case "PART_1": return SPEAKING_TOPICS_PART1;
+        case "PART_2": return SPEAKING_TOPICS_PART2;
+        case "PART_3": return SPEAKING_TOPICS_PART3;
+        default: return SPEAKING_TOPICS_FULL;
+      }
     default:
       return [];
   }
@@ -222,6 +231,13 @@ export default function TestFactoryAdmin() {
     setQuestionType("mixed");
     setMonologue(false);
   }, [module]);
+
+  // Reset topic when question type changes for modules with type-specific topics (speaking, writing)
+  useEffect(() => {
+    if (module === "speaking" || module === "writing") {
+      setTopic("");
+    }
+  }, [questionType, module]);
 
   // Fetch jobs on mount (polling to guarantee near real-time updates)
   useEffect(() => {
@@ -587,7 +603,7 @@ export default function TestFactoryAdmin() {
     );
   }
 
-  const topics = getTopicsForModule(module);
+  const topics = getTopicsForModule(module, questionType);
   const questionTypes = QUESTION_TYPES[module as keyof typeof QUESTION_TYPES] || [];
 
   return (

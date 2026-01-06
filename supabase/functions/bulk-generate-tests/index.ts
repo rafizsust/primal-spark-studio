@@ -514,7 +514,7 @@ ${scriptText}`;
       if (module === "speaking") {
         try {
           const speakingAudioUrls = await withRetry(
-            () => generateSpeakingAudio(supabase, content, voiceName, jobId, i),
+            () => generateSpeakingAudio(supabase, content, voiceName, jobId, i, currentQuestionType),
             2,
             2000
           );
@@ -1169,13 +1169,65 @@ Return ONLY valid JSON:
 }
 
 function getSpeakingPrompt(topic: string, difficulty: string, questionType: string): string {
-  const includeParts = questionType === "FULL_TEST" 
-    ? "all three parts (Part 1, 2, and 3)"
-    : questionType === "PART_1" ? "Part 1 only"
-    : questionType === "PART_2" ? "Part 2 only"
-    : "Part 3 only";
+  // Generate only the requested part(s) based on questionType
+  if (questionType === "PART_1") {
+    return `Generate an IELTS Speaking Part 1 test (Introduction & Interview):
+Topic: ${topic}
+Difficulty: ${difficulty}
 
-  return `Generate an IELTS Speaking test for ${includeParts}:
+Part 1 focuses on familiar topics about the candidate's life, interests, and opinions.
+Generate 4 questions related to the topic.
+
+Return ONLY valid JSON:
+{
+  "part1": {
+    "instruction": "I'd like to ask you some questions about yourself.",
+    "questions": ["Question 1?", "Question 2?", "Question 3?", "Question 4?"],
+    "sample_answers": ["Sample answer 1 (2-3 sentences)", "Sample answer 2", "Sample answer 3", "Sample answer 4"]
+  }
+}`;
+  }
+
+  if (questionType === "PART_2") {
+    return `Generate an IELTS Speaking Part 2 test (Individual Long Turn):
+Topic: ${topic}
+Difficulty: ${difficulty}
+
+Part 2 gives candidates a cue card with a topic to speak about for 1-2 minutes after 1 minute preparation.
+Create a cue card with the main topic and 3-4 bullet points to cover.
+
+Return ONLY valid JSON:
+{
+  "part2": {
+    "instruction": "Now I'm going to give you a topic.",
+    "cue_card": "Describe a [specific topic related to ${topic}].\\nYou should say:\\n- point 1\\n- point 2\\n- point 3\\nAnd explain why this is important/memorable to you.",
+    "preparation_time": 60,
+    "speaking_time": 120,
+    "sample_answer": "Model answer demonstrating Band 8-9 language (200-250 words)..."
+  }
+}`;
+  }
+
+  if (questionType === "PART_3") {
+    return `Generate an IELTS Speaking Part 3 test (Discussion):
+Topic: ${topic}
+Difficulty: ${difficulty}
+
+Part 3 involves abstract discussion questions related to the Part 2 topic.
+Generate 3-4 deeper discussion questions that require analysis and opinion.
+
+Return ONLY valid JSON:
+{
+  "part3": {
+    "instruction": "Let's discuss some more general questions related to this topic.",
+    "questions": ["Discussion Q1?", "Discussion Q2?", "Discussion Q3?"],
+    "sample_answers": ["Sample analytical answer 1", "Sample answer 2", "Sample answer 3"]
+  }
+}`;
+  }
+
+  // FULL_TEST - all three parts
+  return `Generate an IELTS Speaking test with all three parts:
 Topic: ${topic}
 Difficulty: ${difficulty}
 
@@ -1470,17 +1522,23 @@ async function processWithConcurrency<T, R>(
 }
 
 // Generate speaking audio for instructions and questions (PARALLELIZED)
+// Now respects questionType to only generate audio for the requested part(s)
 async function generateSpeakingAudio(
   supabaseServiceClient: any,
   content: any,
   voiceName: string,
   jobId: string,
-  index: number
+  index: number,
+  questionType: string = "FULL_TEST"
 ): Promise<Record<string, string> | null> {
   const ttsItems: Array<{ key: string; text: string }> = [];
   
-  // Collect all texts that need TTS
-  if (content.part1) {
+  // Only collect TTS items for the requested part(s)
+  const includePart1 = questionType === "FULL_TEST" || questionType === "PART_1";
+  const includePart2 = questionType === "FULL_TEST" || questionType === "PART_2";
+  const includePart3 = questionType === "FULL_TEST" || questionType === "PART_3";
+  
+  if (includePart1 && content.part1) {
     if (content.part1.instruction) {
       ttsItems.push({ key: "part1_instruction", text: content.part1.instruction });
     }
@@ -1489,7 +1547,7 @@ async function generateSpeakingAudio(
     });
   }
   
-  if (content.part2) {
+  if (includePart2 && content.part2) {
     const part2Instruction = "Now, I'm going to give you a topic. You'll have one minute to prepare, then speak for one to two minutes.";
     ttsItems.push({ key: "part2_instruction", text: part2Instruction });
     
@@ -1504,7 +1562,7 @@ async function generateSpeakingAudio(
     });
   }
   
-  if (content.part3) {
+  if (includePart3 && content.part3) {
     const part3Instruction = "Now let's discuss some more general questions related to this topic.";
     ttsItems.push({ key: "part3_instruction", text: part3Instruction });
     
@@ -1519,7 +1577,7 @@ async function generateSpeakingAudio(
     return null;
   }
 
-  console.log(`[Job ${jobId}] Generating audio for ${ttsItems.length} speaking items using PARALLEL Gemini TTS`);
+  console.log(`[Job ${jobId}] Generating audio for ${ttsItems.length} speaking items (${questionType}) using PARALLEL Gemini TTS`);
 
   // Use WAV for bulk admin speaking audio (MP3 encoding exceeds CPU time limits)
   const { createWavFromPcm } = await import("../_shared/audioCompressor.ts");
