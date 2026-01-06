@@ -1,77 +1,8 @@
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import { fetchFile, toBlobURL } from '@ffmpeg/util';
-
-let ffmpeg: FFmpeg | null = null;
-let loadingPromise: Promise<FFmpeg> | null = null;
-let loadFailed = false;
+import lamejs from '@breezystack/lamejs';
 
 /**
- * Load FFmpeg WASM (singleton pattern to avoid reloading)
- */
-async function ensureFFmpegLoaded(): Promise<FFmpeg> {
-  // If loading already failed, throw immediately
-  if (loadFailed) {
-    throw new Error('FFmpeg failed to load previously. Please refresh the page to try again.');
-  }
-
-  if (ffmpeg && ffmpeg.loaded) {
-    return ffmpeg;
-  }
-
-  if (loadingPromise) {
-    return loadingPromise;
-  }
-
-  loadingPromise = (async () => {
-    const ff = new FFmpeg();
-    
-    // Use multiple CDN sources for resilience
-    const cdnSources = [
-      'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
-      'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
-    ];
-
-    let lastError: Error | null = null;
-
-    for (const baseURL of cdnSources) {
-      try {
-        console.log(`[AudioCompressor] Trying to load FFmpeg from ${baseURL}...`);
-        
-        // Fetch and create blob URLs for CORS-free loading
-        const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
-        const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
-        
-        await ff.load({ coreURL, wasmURL });
-        
-        console.log('[AudioCompressor] FFmpeg loaded successfully!');
-        ffmpeg = ff;
-        return ff;
-      } catch (err) {
-        console.warn(`[AudioCompressor] Failed to load from ${baseURL}:`, err);
-        lastError = err instanceof Error ? err : new Error(String(err));
-      }
-    }
-
-    // All CDN sources failed
-    loadFailed = true;
-    throw new Error(
-      `Failed to load FFmpeg. This may be due to browser restrictions. ` +
-      `Original error: ${lastError?.message || 'Unknown error'}`
-    );
-  })();
-
-  try {
-    return await loadingPromise;
-  } catch (err) {
-    loadingPromise = null;
-    throw err;
-  }
-}
-
-/**
- * Compress audio file for efficient storage.
- * Converts to MP3 with: Mono (1 channel), 24kHz sample rate, 64kbps bitrate.
- * Optimized for spoken word/IELTS content.
+ * Compress audio file to MP3 using lamejs (pure JavaScript, no WASM/cross-origin requirements)
+ * Optimized for spoken word/IELTS content: Mono, 22kHz, 32kbps
  * 
  * @param file - The audio file to compress
  * @param onProgress - Optional progress callback (0-100)
@@ -81,56 +12,86 @@ export async function compressAudio(
   file: File,
   onProgress?: (progress: number) => void
 ): Promise<File> {
-  const ff = await ensureFFmpegLoaded();
-
-  // Get file extension and create input/output names
-  const inputExt = file.name.substring(file.name.lastIndexOf('.')) || '.mp3';
-  const inputName = `input${inputExt}`;
-  const outputName = 'output.mp3';
-
-  // Track progress if callback provided
-  if (onProgress) {
-    ff.on('progress', ({ progress }) => {
-      onProgress(Math.round(progress * 100));
-    });
-  }
-
   try {
-    // Write input file to FFmpeg virtual filesystem
-    await ff.writeFile(inputName, await fetchFile(file));
-
-    // Compress: Mono (ac 1), 24kHz (ar 24000), 64kbps (b:a 64k)
-    // These settings are optimized for spoken word/IELTS content
-    await ff.exec([
-      '-i', inputName,
-      '-ac', '1',           // Mono channel
-      '-ar', '24000',       // 24kHz sample rate
-      '-b:a', '64k',        // 64kbps bitrate
-      '-map_metadata', '-1', // Strip metadata to save space
-      outputName
-    ]);
-
-    // Read the compressed output
-    const data = await ff.readFile(outputName);
+    // Decode audio file to PCM samples
+    const arrayBuffer = await file.arrayBuffer();
+    const audioContext = new AudioContext();
+    const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
     
-    // Clean up files from virtual filesystem
-    await ff.deleteFile(inputName);
-    await ff.deleteFile(outputName);
-
-    // Convert FileData to ArrayBuffer for File constructor compatibility
-    let arrayBuffer: ArrayBuffer;
-    if (typeof data === 'string') {
-      const encoder = new TextEncoder();
-      arrayBuffer = encoder.encode(data).buffer as ArrayBuffer;
+    // Get audio data (convert to mono if stereo)
+    const numberOfChannels = audioBuffer.numberOfChannels;
+    let samples: Float32Array;
+    
+    if (numberOfChannels === 1) {
+      samples = audioBuffer.getChannelData(0);
     } else {
-      // Create a new ArrayBuffer from the Uint8Array to avoid SharedArrayBuffer issues
-      arrayBuffer = new ArrayBuffer(data.length);
-      new Uint8Array(arrayBuffer).set(data);
+      // Mix down to mono
+      const left = audioBuffer.getChannelData(0);
+      const right = audioBuffer.getChannelData(1);
+      samples = new Float32Array(left.length);
+      for (let i = 0; i < left.length; i++) {
+        samples[i] = (left[i] + right[i]) / 2;
+      }
     }
-
+    
+    // Resample to 22kHz for better compression (speech audio)
+    const originalSampleRate = audioBuffer.sampleRate;
+    const targetSampleRate = 22050;
+    const resampledSamples = resampleAudio(samples, originalSampleRate, targetSampleRate);
+    
+    // Convert float samples to 16-bit PCM
+    const pcmSamples = new Int16Array(resampledSamples.length);
+    for (let i = 0; i < resampledSamples.length; i++) {
+      const s = Math.max(-1, Math.min(1, resampledSamples[i]));
+      pcmSamples[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+    }
+    
+    // Encode to MP3 using lamejs
+    const mp3encoder = new lamejs.Mp3Encoder(1, targetSampleRate, 32); // mono, 22kHz, 32kbps
+    const mp3Data: Uint8Array[] = [];
+    
+    const sampleBlockSize = 1152; // Must be multiple of 576 for MP3
+    const totalBlocks = Math.ceil(pcmSamples.length / sampleBlockSize);
+    
+    for (let i = 0; i < pcmSamples.length; i += sampleBlockSize) {
+      const sampleChunk = pcmSamples.subarray(i, i + sampleBlockSize);
+      const mp3buf = mp3encoder.encodeBuffer(sampleChunk);
+      if (mp3buf.length > 0) {
+        mp3Data.push(new Uint8Array(mp3buf));
+      }
+      
+      // Report progress
+      if (onProgress) {
+        const currentBlock = Math.floor(i / sampleBlockSize);
+        onProgress(Math.round((currentBlock / totalBlocks) * 100));
+      }
+    }
+    
+    // Flush remaining data
+    const mp3buf = mp3encoder.flush();
+    if (mp3buf.length > 0) {
+      mp3Data.push(new Uint8Array(mp3buf));
+    }
+    
+    // Combine all MP3 chunks
+    const totalLength = mp3Data.reduce((acc, chunk) => acc + chunk.length, 0);
+    const mp3Array = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of mp3Data) {
+      mp3Array.set(chunk, offset);
+      offset += chunk.length;
+    }
+    
     // Create new file with .mp3 extension
     const baseName = file.name.replace(/\.[^/.]+$/, '');
-    return new File([arrayBuffer], `${baseName}.mp3`, { type: 'audio/mpeg' });
+    
+    if (onProgress) {
+      onProgress(100);
+    }
+    
+    await audioContext.close();
+    
+    return new File([mp3Array], `${baseName}.mp3`, { type: 'audio/mpeg' });
   } catch (error) {
     console.error('[AudioCompressor] Compression failed:', error);
     throw new Error(`Failed to compress audio: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -138,16 +99,35 @@ export async function compressAudio(
 }
 
 /**
- * Check if FFmpeg compression is supported in this browser
+ * Simple linear interpolation resampling
+ */
+function resampleAudio(samples: Float32Array, fromRate: number, toRate: number): Float32Array {
+  if (fromRate === toRate) {
+    return samples;
+  }
+  
+  const ratio = fromRate / toRate;
+  const newLength = Math.round(samples.length / ratio);
+  const result = new Float32Array(newLength);
+  
+  for (let i = 0; i < newLength; i++) {
+    const srcIndex = i * ratio;
+    const srcIndexFloor = Math.floor(srcIndex);
+    const srcIndexCeil = Math.min(srcIndexFloor + 1, samples.length - 1);
+    const fraction = srcIndex - srcIndexFloor;
+    
+    result[i] = samples[srcIndexFloor] * (1 - fraction) + samples[srcIndexCeil] * fraction;
+  }
+  
+  return result;
+}
+
+/**
+ * Check if audio compression is supported (always true with lamejs - pure JS)
  */
 export function isCompressionSupported(): boolean {
-  // FFmpeg WASM needs SharedArrayBuffer, which is only available in a cross-origin isolated context.
-  // In Chrome this is controlled by COOP/COEP response headers.
-  return (
-    typeof SharedArrayBuffer !== 'undefined' &&
-    typeof crossOriginIsolated !== 'undefined' &&
-    crossOriginIsolated === true
-  );
+  // lamejs is pure JavaScript, works everywhere
+  return typeof AudioContext !== 'undefined' || typeof (window as any).webkitAudioContext !== 'undefined';
 }
 
 /**
@@ -156,9 +136,9 @@ export function isCompressionSupported(): boolean {
  * @returns Estimated compressed size in bytes
  */
 export function estimateCompressedSize(originalSize: number): number {
-  // 64kbps mono MP3 is typically 80-90% smaller than uncompressed audio
-  // Conservative estimate: 15% of original size
-  return Math.round(originalSize * 0.15);
+  // 32kbps mono MP3 is typically 85-95% smaller than uncompressed audio
+  // Conservative estimate: 10% of original size
+  return Math.round(originalSize * 0.10);
 }
 
 /**
