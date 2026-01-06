@@ -437,12 +437,39 @@ export default function AIPractice() {
             // Pick random matching test
             const cachedTest = testsToChooseFrom[Math.floor(Math.random() * testsToChooseFrom.length)];
             const payload = cachedTest.content_payload as Record<string, unknown>;
-            
+
+            // Normalize DB preset payloads into the UI's expected shape.
+            // `generated_test_audio.content_payload` stores { questions, instruction, table_data, ... }
+            // while the UI expects `questionGroups`.
+            const rawQuestionGroups = (payload as any)?.questionGroups ?? (payload as any)?.question_groups;
+            const rawQuestions = (payload as any)?.questions;
+
+            const normalizedQuestionGroups: unknown[] | undefined =
+              Array.isArray(rawQuestionGroups) && rawQuestionGroups.length > 0
+                ? rawQuestionGroups
+                : Array.isArray(rawQuestions) && rawQuestions.length > 0
+                  ? [
+                      {
+                        id: `preset-group-${cachedTest.id}`,
+                        instruction: (payload as any)?.instruction ?? '',
+                        question_type: cachedTest.question_type,
+                        start_question: (rawQuestions[0]?.question_number as number) ?? 1,
+                        end_question:
+                          (rawQuestions[rawQuestions.length - 1]?.question_number as number) ?? rawQuestions.length,
+                        options:
+                          (payload as any)?.table_data
+                            ? { table_data: (payload as any).table_data }
+                            : undefined,
+                        questions: rawQuestions,
+                      },
+                    ]
+                  : undefined;
+
             // Validate payload has questionGroups
-            const questionGroups = payload?.questionGroups as unknown[];
+            const questionGroups = normalizedQuestionGroups as unknown[] | undefined;
             if (questionGroups && Array.isArray(questionGroups) && questionGroups.length > 0) {
               console.log('[cache] HIT! Using pre-generated test:', cachedTest.id, cachedTest.topic);
-              
+
               // Build the GeneratedTest from cached data
               const generatedTest: GeneratedTest = {
                 id: `cached-${cachedTest.id}-${Date.now()}`,
@@ -451,15 +478,15 @@ export default function AIPractice() {
                 difficulty,
                 topic: cachedTest.topic,
                 timeMinutes: timeMinutes,
-                passage: payload.passage as any,
+                passage: (payload as any).passage,
                 audioUrl: cachedTest.audio_url || undefined,
                 audioBase64: undefined,
                 audioFormat: undefined,
                 sampleRate: undefined,
-                transcript: cachedTest.transcript || (payload.transcript as string) || undefined,
+                transcript: cachedTest.transcript || ((payload as any).transcript as string) || undefined,
                 questionGroups: questionGroups as any,
-                writingTask: payload.writingTask as any,
-                speakingParts: payload.speakingParts as any,
+                writingTask: (payload as any).writingTask,
+                speakingParts: (payload as any).speakingParts,
                 isPreset: true,
                 presetId: cachedTest.id,
                 totalQuestions: (questionGroups as any[]).reduce((acc, g) => acc + (g.questions?.length || 0), 0),
