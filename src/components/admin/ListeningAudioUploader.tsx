@@ -6,7 +6,7 @@ import { Progress } from '@/components/ui/progress';
 import { UploadCloud, Loader2, Music, Zap } from 'lucide-react';
 import { toast } from 'sonner';
 import { uploadToR2 } from '@/lib/r2Upload';
-import { compressAudio, formatFileSize, estimateCompressedSize } from '@/utils/audioCompressor';
+import { compressAudio, formatFileSize, estimateCompressedSize, isCompressionSupported } from '@/utils/audioCompressor';
 
 interface ListeningAudioUploaderProps {
   testId: string;
@@ -49,27 +49,45 @@ export function ListeningAudioUploader({
 
     setUploading(true);
     setProgress(0);
-    setCompressing(true);
-    setCompressionProgress(0);
+    
+    let fileToUpload = file;
+    let wasCompressed = false;
+
+    // Try compression if supported
+    if (isCompressionSupported()) {
+      setCompressing(true);
+      setCompressionProgress(0);
+
+      try {
+        toast.info('Compressing audio for optimal storage...');
+        const originalSize = file.size;
+        
+        const compressedFile = await compressAudio(file, (p) => {
+          setCompressionProgress(p);
+        });
+        
+        const compressedSize = compressedFile.size;
+        const savings = Math.round((1 - compressedSize / originalSize) * 100);
+        
+        toast.success(`Compressed: ${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)} (${savings}% smaller)`);
+        fileToUpload = compressedFile;
+        wasCompressed = true;
+      } catch (compressionError: any) {
+        console.warn('Compression failed, uploading original file:', compressionError);
+        toast.warning('Compression unavailable, uploading original file...');
+        // Continue with original file
+      } finally {
+        setCompressing(false);
+        setCompressionProgress(0);
+      }
+    } else {
+      toast.info('Browser does not support compression, uploading original...');
+    }
 
     try {
-      // Step 1: Compress the audio file
-      toast.info('Compressing audio for optimal storage...');
-      const originalSize = file.size;
-      
-      const compressedFile = await compressAudio(file, (p) => {
-        setCompressionProgress(p);
-      });
-      
-      const compressedSize = compressedFile.size;
-      const savings = Math.round((1 - compressedSize / originalSize) * 100);
-      
-      setCompressing(false);
-      toast.success(`Compressed: ${formatFileSize(originalSize)} → ${formatFileSize(compressedSize)} (${savings}% smaller)`);
-
-      // Step 2: Upload the compressed file
+      // Upload the file (compressed or original)
       const result = await uploadToR2({
-        file: compressedFile,
+        file: fileToUpload,
         folder: `listening-audios/${testId}`,
         onProgress: setProgress,
       });
@@ -79,14 +97,14 @@ export function ListeningAudioUploader({
       }
 
       onUploadSuccess(result.url);
-      toast.success('Audio uploaded successfully!');
+      toast.success(`Audio uploaded successfully!${wasCompressed ? '' : ' (uncompressed)'}`);
       setFile(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = '';
       }
     } catch (error: any) {
       console.error('Error uploading audio:', error);
-      toast.error(`Upload failed: ${error.message}`);
+      toast.error(`Upload failed: ${error.message || 'Unknown error'}`);
     } finally {
       setUploading(false);
       setCompressing(false);

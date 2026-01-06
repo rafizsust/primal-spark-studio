@@ -2,33 +2,70 @@ import { FFmpeg } from '@ffmpeg/ffmpeg';
 import { fetchFile, toBlobURL } from '@ffmpeg/util';
 
 let ffmpeg: FFmpeg | null = null;
-let loadingPromise: Promise<void> | null = null;
+let loadingPromise: Promise<FFmpeg> | null = null;
+let loadFailed = false;
 
 /**
  * Load FFmpeg WASM (singleton pattern to avoid reloading)
  */
 async function ensureFFmpegLoaded(): Promise<FFmpeg> {
+  // If loading already failed, throw immediately
+  if (loadFailed) {
+    throw new Error('FFmpeg failed to load previously. Please refresh the page to try again.');
+  }
+
   if (ffmpeg && ffmpeg.loaded) {
     return ffmpeg;
   }
 
   if (loadingPromise) {
-    await loadingPromise;
-    return ffmpeg!;
+    return loadingPromise;
   }
 
-  ffmpeg = new FFmpeg();
-  
   loadingPromise = (async () => {
-    const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-    await ffmpeg!.load({
-      coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-      wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    });
+    const ff = new FFmpeg();
+    
+    // Use multiple CDN sources for resilience
+    const cdnSources = [
+      'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd',
+      'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.6/dist/umd',
+    ];
+
+    let lastError: Error | null = null;
+
+    for (const baseURL of cdnSources) {
+      try {
+        console.log(`[AudioCompressor] Trying to load FFmpeg from ${baseURL}...`);
+        
+        // Fetch and create blob URLs for CORS-free loading
+        const coreURL = await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript');
+        const wasmURL = await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm');
+        
+        await ff.load({ coreURL, wasmURL });
+        
+        console.log('[AudioCompressor] FFmpeg loaded successfully!');
+        ffmpeg = ff;
+        return ff;
+      } catch (err) {
+        console.warn(`[AudioCompressor] Failed to load from ${baseURL}:`, err);
+        lastError = err instanceof Error ? err : new Error(String(err));
+      }
+    }
+
+    // All CDN sources failed
+    loadFailed = true;
+    throw new Error(
+      `Failed to load FFmpeg. This may be due to browser restrictions. ` +
+      `Original error: ${lastError?.message || 'Unknown error'}`
+    );
   })();
 
-  await loadingPromise;
-  return ffmpeg!;
+  try {
+    return await loadingPromise;
+  } catch (err) {
+    loadingPromise = null;
+    throw err;
+  }
 }
 
 /**
@@ -84,7 +121,7 @@ export async function compressAudio(
     let arrayBuffer: ArrayBuffer;
     if (typeof data === 'string') {
       const encoder = new TextEncoder();
-      arrayBuffer = encoder.encode(data).buffer;
+      arrayBuffer = encoder.encode(data).buffer as ArrayBuffer;
     } else {
       // Create a new ArrayBuffer from the Uint8Array to avoid SharedArrayBuffer issues
       arrayBuffer = new ArrayBuffer(data.length);
@@ -95,9 +132,17 @@ export async function compressAudio(
     const baseName = file.name.replace(/\.[^/.]+$/, '');
     return new File([arrayBuffer], `${baseName}.mp3`, { type: 'audio/mpeg' });
   } catch (error) {
-    console.error('Audio compression failed:', error);
+    console.error('[AudioCompressor] Compression failed:', error);
     throw new Error(`Failed to compress audio: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
+}
+
+/**
+ * Check if FFmpeg compression is supported in this browser
+ */
+export function isCompressionSupported(): boolean {
+  // Check for SharedArrayBuffer support (required for FFmpeg WASM)
+  return typeof SharedArrayBuffer !== 'undefined';
 }
 
 /**
