@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { crypto } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 import { uploadToR2 } from "../_shared/r2Client.ts";
-import { createPcmWav } from "../_shared/pcmToWav.ts";
+import { compressPcmToMp3 } from "../_shared/audioCompressor.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -301,17 +301,17 @@ async function processItemsWithQueue({
         voiceName,
       });
 
-      // Upload standard 16-bit PCM WAV to R2 (full quality, no Mu-Law degradation)
+      // Compress PCM to MP3 for 80-90% size reduction (consistent with AI Practice)
       try {
         const textHash = await hashText(item.text + voiceName);
-        const fileName = `${folder}/${textHash}.wav`;
+        const fileName = `${folder}/${textHash}.mp3`;
 
         const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-        const wavBuffer = createPcmWav(pcmBytes, sampleRate);
+        const mp3Buffer = compressPcmToMp3(pcmBytes, sampleRate);
 
-        console.log("generate-gemini-tts: wav bytes=", wavBuffer.length, "key=", fileName);
+        console.log("generate-gemini-tts: mp3 bytes=", mp3Buffer.length, "key=", fileName, "(compressed from", pcmBytes.length, "PCM bytes)");
 
-        const uploadResult = await uploadToR2(fileName, wavBuffer, "audio/wav");
+        const uploadResult = await uploadToR2(fileName, mp3Buffer, "audio/mpeg");
 
         if (uploadResult.success && uploadResult.url) {
           return {
