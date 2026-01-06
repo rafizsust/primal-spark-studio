@@ -78,7 +78,7 @@ serve(async (req) => {
       JSON.stringify({
         success: true,
         contentType: result.contentType,
-        base64: base64Encode(result.bytes),
+        base64: base64Encode(result.bytes.buffer as ArrayBuffer),
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
