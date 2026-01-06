@@ -1425,12 +1425,13 @@ async function generateAndUploadAudio(
     : await generateGeminiTtsDirect(supabaseServiceClient, cleanText, speaker1Voice);
 
   // Convert base64 PCM to Mu-Law WAV and upload to R2
-  // Mu-Law: 50% size reduction, fast encoding (no CPU timeout issues)
+  // Mu-Law: 50% size reduction vs 16-bit PCM, fast encoding (no CPU timeout issues)
+  // ADDITIONAL: downsample to 8kHz for real storage savings (speech-safe)
   const { createMuLawWav } = await import("../_shared/muLawCompressor.ts");
   const { uploadToR2 } = await import("../_shared/r2Client.ts");
 
   const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-  const wavBytes = createMuLawWav(pcmBytes, sampleRate);
+  const wavBytes = createMuLawWav(pcmBytes, sampleRate, 8000);
   // Admin audio goes to "presets/" folder for permanent storage
   const key = `presets/${jobId}/${index}.wav`;
 
@@ -1539,7 +1540,7 @@ async function generateSpeakingAudio(
         );
 
         const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
-        const wavBytes = createMuLawWav(pcmBytes, sampleRate);
+        const wavBytes = createMuLawWav(pcmBytes, sampleRate, 8000);
         // Admin speaking audio goes to "presets/" folder for permanent storage
         const key = `presets/speaking/${jobId}/${index}/${item.key}.wav`;
 
