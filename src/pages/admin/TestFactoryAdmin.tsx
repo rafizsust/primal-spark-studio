@@ -299,7 +299,46 @@ export default function TestFactoryAdmin() {
       if (error) throw error;
 
       if ((data as any)?.jobs) {
-        setJobs((data as any).jobs);
+        const nextJobs = (data as any).jobs as GenerationJob[];
+        setJobs(nextJobs);
+
+        // ALSO auto-compress completed speaking jobs even if you never click into them.
+        // This is the only "100%" way to avoid edge CPU timeouts while still ending up with MP3s.
+        const completedSpeakingJobs = nextJobs
+          .filter((j) => j.module === "speaking" && j.status === "completed")
+          .slice(0, 3); // safety: only process newest few in background
+
+        for (const job of completedSpeakingJobs) {
+          // Fetch tests for the job (without switching UI selection)
+          const { data: jobData, error: jobErr } = await supabase.functions.invoke("get-job-status", {
+            body: { jobId: job.id },
+          });
+          if (jobErr) {
+            console.warn("Failed fetching job tests for auto-compress:", jobErr);
+            continue;
+          }
+
+          const tests = (jobData as any)?.tests as GeneratedTest[] | undefined;
+          if (!tests?.length) continue;
+
+          // Sequential to avoid pegging CPU/network
+          for (const t of tests) {
+            const payload = (t.content_payload || {}) as any;
+            const audioUrls = payload.audioUrls as Record<string, string> | undefined;
+            if (!audioUrls) continue;
+            const hasWav = Object.values(audioUrls).some((u) => typeof u === "string" && u.endsWith(".wav"));
+            if (!hasWav) continue;
+            if (autoCompressedTestIdsRef.current.has(t.id)) continue;
+
+            autoCompressedTestIdsRef.current.add(t.id);
+            try {
+              await autoCompressSpeakingTest(t);
+            } catch (e) {
+              console.error("Auto-compress (background) failed:", e);
+              autoCompressedTestIdsRef.current.delete(t.id);
+            }
+          }
+        }
       }
     } catch (error) {
       console.error("Failed to fetch jobs:", error);
