@@ -34,9 +34,9 @@ export async function compressAudio(
       }
     }
     
-    // Resample to 22kHz for better compression (speech audio)
+    // Resample to 24kHz for high-quality speech (keeps Gemini-native rate when applicable)
     const originalSampleRate = audioBuffer.sampleRate;
-    const targetSampleRate = 22050;
+    const targetSampleRate = 24000;
     const resampledSamples = resampleAudio(samples, originalSampleRate, targetSampleRate);
     
     // Convert float samples to 16-bit PCM
@@ -47,7 +47,8 @@ export async function compressAudio(
     }
     
     // Encode to MP3 using lamejs
-    const mp3encoder = new lamejs.Mp3Encoder(1, targetSampleRate, 32); // mono, 22kHz, 32kbps
+    // Use 48kbps mono @ 24kHz for noticeably better quality while staying compact.
+    const mp3encoder = new lamejs.Mp3Encoder(1, targetSampleRate, 48);
     const mp3Data: Uint8Array[] = [];
     
     const sampleBlockSize = 1152; // Must be multiple of 576 for MP3
@@ -136,9 +137,9 @@ export function isCompressionSupported(): boolean {
  * @returns Estimated compressed size in bytes
  */
 export function estimateCompressedSize(originalSize: number): number {
-  // 32kbps mono MP3 is typically 85-95% smaller than uncompressed audio
-  // Conservative estimate: 10% of original size
-  return Math.round(originalSize * 0.10);
+  // 48kbps mono MP3 is typically ~80-92% smaller than uncompressed audio (depends on original codec)
+  // Conservative estimate: 15% of original size
+  return Math.round(originalSize * 0.15);
 }
 
 /**
