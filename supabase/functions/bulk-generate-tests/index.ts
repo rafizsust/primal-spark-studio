@@ -1424,14 +1424,16 @@ async function generateAndUploadAudio(
       })
     : await generateGeminiTtsDirect(supabaseServiceClient, cleanText, speaker1Voice);
 
-  // Convert base64 PCM to compressed MP3 and upload to R2
-  const { compressPcmBase64ToMp3 } = await import("../_shared/audioCompressor.ts");
+  // Convert base64 PCM to WAV and upload to R2
+  // Note: MP3 compression is too CPU-intensive for edge functions, so we upload WAV directly
+  const { createWavFromPcm } = await import("../_shared/audioCompressor.ts");
   const { uploadToR2 } = await import("../_shared/r2Client.ts");
 
-  const mp3Bytes = compressPcmBase64ToMp3(audioBase64, sampleRate);
-  const key = `generated-tests/${jobId}/${index}.mp3`;
+  const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
+  const wavBytes = createWavFromPcm(pcmBytes, sampleRate);
+  const key = `generated-tests/${jobId}/${index}.wav`;
 
-  const uploadResult = await uploadToR2(key, mp3Bytes, "audio/mpeg");
+  const uploadResult = await uploadToR2(key, wavBytes, "audio/wav");
 
   if (!uploadResult.success || !uploadResult.url) {
     throw new Error(uploadResult.error || "R2 upload failed");
@@ -1518,7 +1520,8 @@ async function generateSpeakingAudio(
 
   console.log(`[Job ${jobId}] Generating audio for ${ttsItems.length} speaking items using PARALLEL Gemini TTS`);
 
-  const { compressPcmBase64ToMp3 } = await import("../_shared/audioCompressor.ts");
+  // Note: MP3 compression is too CPU-intensive for edge functions, so we upload WAV directly
+  const { createWavFromPcm } = await import("../_shared/audioCompressor.ts");
   const { uploadToR2 } = await import("../_shared/r2Client.ts");
 
   // Process TTS items in parallel with concurrency limit (use all available API keys efficiently)
@@ -1534,10 +1537,11 @@ async function generateSpeakingAudio(
           voiceName
         );
 
-        const mp3Bytes = compressPcmBase64ToMp3(audioBase64, sampleRate);
-        const key = `speaking-tests/${jobId}/${index}/${item.key}.mp3`;
+        const pcmBytes = Uint8Array.from(atob(audioBase64), (c) => c.charCodeAt(0));
+        const wavBytes = createWavFromPcm(pcmBytes, sampleRate);
+        const key = `speaking-tests/${jobId}/${index}/${item.key}.wav`;
 
-        const uploadResult = await uploadToR2(key, mp3Bytes, "audio/mpeg");
+        const uploadResult = await uploadToR2(key, wavBytes, "audio/wav");
         if (uploadResult.success && uploadResult.url) {
           return { key: item.key, url: uploadResult.url };
         }
